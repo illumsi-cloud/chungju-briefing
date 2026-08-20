@@ -314,7 +314,23 @@ def run_briefing():
     # 네이버 검색 API는 "OR" 같은 불리언 연산자를 지원하지 않으므로
     # 키워드별로 각각 호출한 뒤 결과를 합친다 (링크 기준 중복 제거).
     search_targets = [
-        {"category": "🚨 [위기징후] 건설사·아파트 리스크", "type": "news", "queries": ["충주 아파트 시공사 부도", "충주 아파트 건설사 회생", "충주 아파트 공사중단", "충주 아파트 시행사 법정관리", "충주 아파트 허그 보증금"]},
+        {
+            "category": "🚨 [위기징후] 건설사·아파트 리스크",
+            "type": "news",
+            "queries": [
+                "충주 아파트 시공사 부도", "충주 아파트 건설사 회생", "충주 아파트 공사중단",
+                "충주 아파트 시행사 법정관리", "충주 아파트 허그 보증금",
+                "충주 건설사", "충주 아파트 시공사", "서충주 아파트 건설",
+                "삼일건설", "삼일파라뷰"
+            ],
+            # 네이버 뉴스 검색이 단어를 느슨하게 매칭해서(돌봄센터 소식 등) 무관한 기사가 섞이므로,
+            # 제목/요약에 건설·아파트 관련 단어가 실제로 있는 것만 통과시킨다.
+            "must_include": [
+                "시공사", "시행사", "회생절차", "회생 절차", "법정관리", "법정 관리",
+                "공사중단", "공사 중단", "부도", "미분양", "재건축", "재개발", "정비사업",
+                "입주 지연", "보증금 반환", "부실시공", "하자", "PF", "준공"
+            ]
+        },
         {"category": "🗣️ [지역여론] 커뮤니티 (분양/갈등)", "type": "cafearticle", "queries": ["충주 분양 전환", "충주 허그 보증금", "충주 분양 지연", "충주 아파트 취소"]},
         {"category": "🏫 [학교/교육] 학생배치 동향", "type": "news", "queries": ["충주 초등학교 신설", "충주 중학교 배치", "서충주 과밀학급"]},
         {"category": "🏢 [일반동향] 충주 부동산", "type": "news", "queries": ["충주 아파트 분양", "서충주 신도시", "충주 공동주택"]}
@@ -346,13 +362,18 @@ def run_briefing():
                         date_val = parse_naver_date(item.get("pubDate", ""))
                         if not is_recent_or_undated(date_val):
                             continue
+                        title_clean = clean_html(item.get("title", ""))
+                        desc_clean = clean_html(item.get("description", ""))
+                        must_include = target.get("must_include")
+                        if must_include and not any(kw in title_clean or kw in desc_clean for kw in must_include):
+                            continue
                         found_count += 1
                         all_collected_data.append({
                             "수집일시": now_str,
                             "분류": target["category"],
                             "출처": "뉴스" if target["type"] == "news" else "카페",
-                            "제목": clean_html(item.get("title", "")),
-                            "요약": clean_html(item.get("description", "")),
+                            "제목": title_clean,
+                            "요약": desc_clean,
                             "작성일": date_val,
                             "링크": link
                         })
@@ -382,42 +403,6 @@ def run_briefing():
         items = fetch_elis(board["params"], board["category"], now_str)
         all_collected_data.extend(items)
         print(f" - {board['category']}: {len(items)}건 발견")
-
-    # 3. 충주시청 지구단위계획 고시자료 게시판
-    chungju_url = "https://www.chungju.go.kr/www/selectBbsNttList.do?bbsNo=289&key=3267"
-    chungju_row_pattern = re.compile(
-        r'<td class="first">(?P<no>\d+)</td>\s*'
-        r'<td class="subject">\s*.*?'
-        r'<a href="\./selectBbsNttView\.do\?key=3267&amp;bbsNo=289&amp;nttNo=(?P<nttno>\d+)&amp;[^"]*">'
-        r'(?P<title>[^<]*)</a>.*?'
-        r'<td[^>]*>(?P<views>\d+)</td>\s*'
-        r'<td class="last">(?P<date>[\d-]+)</td>',
-        re.S
-    )
-    try:
-        req = urllib.request.Request(chungju_url, headers={"User-Agent": "Mozilla/5.0"})
-        response = urllib.request.urlopen(req, context=ctx)
-        html = response.read().decode('utf-8')
-
-        chungju_count = 0
-        for m in chungju_row_pattern.finditer(html):
-            detail_url = (
-                "https://www.chungju.go.kr/www/selectBbsNttView.do?"
-                f"key=3267&bbsNo=289&nttNo={m.group('nttno')}"
-            )
-            chungju_count += 1
-            all_collected_data.append({
-                "수집일시": now_str,
-                "분류": "📐 [지구단위계획] 고시자료 (충주시청)",
-                "출처": "공식(충주시청)",
-                "제목": clean_html(m.group('title')),
-                "요약": f"조회수 {m.group('views').strip()} · 작성일 {m.group('date').strip()}",
-                "작성일": m.group('date').strip(),
-                "링크": detail_url
-            })
-        print(f" - 📐 [지구단위계획] 고시자료: {chungju_count}건 발견")
-    except Exception as e:
-        print(f" [오류] 충주시청 게시판 수집 실패: {e}")
 
     # 4. 충주시청 공지사항 / 유관기관 공지사항 / 입법예고 / 공고·고시·입찰
     chungju_boards = [
