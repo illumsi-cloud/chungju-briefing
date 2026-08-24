@@ -620,23 +620,47 @@ def run_briefing():
       <title>충주 동향 브리핑</title>
       <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%99%EF%B8%8F%3C/text%3E%3C/svg%3E">
       <meta name="description" content="충주시 개발·부동산·학교 동향을 자동 수집하는 대시보드 (GitHub Actions로 하루 3회 자동 갱신)">
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&display=swap">
       <style>
         :root {{
-          --bg-page: #f2f2f0;
+          --bg-page: #eef0f3;
           --bg: #ffffff;
-          --bg-subtle: #fafaf9;
-          --border: #e2e2df;
-          --border-strong: #c9c9c5;
-          --text-primary: #1a1a1a;
-          --text-secondary: #595955;
-          --text-dim: #8c8c87;
-          --accent: #d9531e;
-          --accent-dark: #b84415;
-          --accent-green: #0a7a3d;
-          --accent-red: #c81e3a;
-          --accent-blue: #1a5fb4;
-          --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-          --sans: 'Segoe UI', 'Pretendard', 'Malgun Gothic', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
+          --bg-subtle: #f7f8fa;
+          --border: #dde1e7;
+          --border-strong: #c7cdd6;
+          --text-primary: #16191f;
+          --text-secondary: #6b7382;
+          --text-dim: #98a0ad;
+
+          /* 구조색: 아이콘·출처 배지·링크 hover */
+          --accent: #24506b;
+          --accent-dark: #1a3d53;
+          --accent-soft: #e8eff4;
+          --accent-line: #b6c9d6;
+
+          /* 브랜드색: CJ 마크와 검색 버튼에만 쓴다 */
+          --brand: #d9531e;
+          --brand-dark: #b84415;
+
+          /* 의미색 */
+          --accent-green: #1b6b47;
+          --green-soft: #e6f2ec;
+          --green-line: #b7d9c7;
+          --accent-red: #b3261e;
+          --red-soft: #fbeae8;
+          --red-line: #ebc2bd;
+          --accent-blue: #24506b;
+
+          /* B1 융기 괘선 */
+          --rule-top: #3d444f;
+          --rule-bottom: #16191f;
+          --gloss: rgba(255,255,255,.9);
+          --cast: rgba(22,25,31,.22);
+
+          --mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+          --sans: 'IBM Plex Sans KR', 'Segoe UI', 'Pretendard', 'Malgun Gothic', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
         }}
 
         * {{ box-sizing: border-box; }}
@@ -671,9 +695,10 @@ def run_briefing():
           font-family: var(--sans);
           font-weight: 700;
           font-size: 0.95em;
-          background: var(--accent);
+          background: var(--brand);
           color: #ffffff;
           letter-spacing: 0.5px;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 1px 2px rgba(22,25,31,.18);
         }}
 
         .brand h1 {{
@@ -720,7 +745,13 @@ def run_briefing():
           gap: 1px;
           background: var(--border);
           border: 1px solid var(--border);
+          border-radius: 5px;
+          overflow: hidden;
           margin: 22px 28px 0 28px;
+          box-shadow:
+            inset 0 1px 0 var(--gloss),
+            0 1px 1px rgba(22,25,31,.05),
+            0 9px 20px -13px var(--cast);
         }}
 
         .stat-tile {{
@@ -729,9 +760,10 @@ def run_briefing():
         }}
 
         .stat-tile .label {{
-          font-size: 0.7em;
+          font-family: var(--mono);
+          font-size: 0.66em;
           color: var(--text-dim);
-          letter-spacing: 0.4px;
+          letter-spacing: 0.09em;
           text-transform: uppercase;
           margin-bottom: 8px;
         }}
@@ -739,7 +771,9 @@ def run_briefing():
         .stat-tile .value {{
           font-family: var(--sans);
           font-size: 1.5em;
-          font-weight: 700;
+          font-weight: 600;
+          letter-spacing: -.02em;
+          font-variant-numeric: tabular-nums;
           color: var(--text-primary);
         }}
 
@@ -759,9 +793,10 @@ def run_briefing():
           font-size: 0.98em;
           font-weight: 700;
           color: var(--text-primary);
-          padding-bottom: 8px;
+          padding-bottom: 9px;
           margin-bottom: 14px;
-          border-bottom: 3px solid var(--accent);
+          border-bottom: 2px solid var(--rule-bottom);
+          letter-spacing: -.01em;
         }}
 
         .column-body {{
@@ -770,15 +805,39 @@ def run_briefing():
           gap: 16px;
         }}
 
+        /* B1 · 융기 괘선: 카드를 지면에서 띄우고 상단 괘선에 그라디언트와 광택선을 넣는다 */
         .card {{
           background: var(--bg);
           border: 1px solid var(--border);
+          border-radius: 5px;
+          overflow: hidden;
+          box-shadow:
+            inset 0 1px 0 var(--gloss),
+            0 1px 1px rgba(22,25,31,.05),
+            0 9px 20px -11px var(--cast);
+          transition: box-shadow .18s ease, transform .18s ease;
+        }}
+
+        .card:hover {{
+          transform: translateY(-1px);
+          box-shadow:
+            inset 0 1px 0 var(--gloss),
+            0 1px 1px rgba(22,25,31,.06),
+            0 14px 26px -12px var(--cast);
+        }}
+
+        .card::before {{
+          content: '';
+          display: block;
+          height: 3px;
+          background: linear-gradient(180deg, var(--rule-top) 0%, var(--rule-bottom) 100%);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.28);
         }}
 
         .card-header {{
           display: flex;
           align-items: center;
-          justify-content: space-between;
+          gap: 8px;
           padding: 11px 14px;
           border-bottom: 1px solid var(--border);
           background: var(--bg-subtle);
@@ -786,10 +845,22 @@ def run_briefing():
 
         .card-header h2 {{
           margin: 0;
-          font-size: 0.86em;
-          font-weight: 700;
+          font-family: var(--mono);
+          font-size: 0.76em;
+          font-weight: 600;
+          letter-spacing: .05em;
           color: var(--text-primary);
+          flex: 1;
+          min-width: 0;
         }}
+
+        .card-icon {{
+          width: 16px;
+          height: 16px;
+          flex: none;
+          color: var(--accent);
+        }}
+        .card-icon svg {{ width: 100%; height: 100%; display: block; }}
 
         .card-count {{
           font-family: var(--mono);
@@ -824,34 +895,36 @@ def run_briefing():
         .item-top {{
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 5px;
           margin-bottom: 6px;
+          flex-wrap: wrap;
         }}
 
         .badge {{
           display: inline-block;
-          padding: 1px 7px;
+          padding: 1.5px 6px;
           font-size: 0.66em;
           font-family: var(--mono);
-          border-radius: 3px;
-          font-weight: 700;
+          border-radius: 2px;
+          font-weight: 500;
           letter-spacing: 0.2px;
           border: 1px solid transparent;
+          white-space: nowrap;
         }}
 
-        .badge-news {{ background: #eaf1fb; color: var(--accent-blue); border-color: #c3d7f0; }}
-        .badge-cafe {{ background: #e8f6ee; color: var(--accent-green); border-color: #b9e3ca; }}
-        .badge-official {{ background: #fdf1e8; color: var(--accent); border-color: #f2cdb0; }}
+        .badge-news {{ background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }}
+        .badge-cafe {{ background: var(--green-soft); color: var(--accent-green); border-color: var(--green-line); }}
+        .badge-official {{ background: var(--bg-subtle); color: var(--text-secondary); border-color: var(--border-strong); }}
         .badge-warning {{
-          background: #fbe9ec;
+          background: var(--red-soft);
           color: var(--accent-red);
-          border-color: #f0bcc4;
+          border-color: var(--red-line);
         }}
 
         .badge-new {{
-          background: #e8f6ee;
+          background: var(--green-soft);
           color: var(--accent-green);
-          border-color: #b9e3ca;
+          border-color: var(--green-line);
         }}
 
         .badge-streak {{
@@ -1077,16 +1150,16 @@ def run_briefing():
 
         .highlight-red {{
           color: var(--accent-red);
-          font-weight: 700;
-          background: #fbe9ec;
+          font-weight: 600;
+          background: var(--red-soft);
           padding: 0 3px;
           border-radius: 2px;
         }}
 
         .highlight-search {{
-          color: #1a1a1a;
-          font-weight: 700;
-          background: #ffe3a3;
+          color: var(--text-primary);
+          font-weight: 600;
+          background: #ffe08a;
           padding: 0 3px;
           border-radius: 2px;
         }}
@@ -1149,12 +1222,13 @@ def run_briefing():
         .filter-btn:active {{ transform: scale(0.97); }}
 
         .filter-btn-search {{
-          background: var(--accent);
+          background: var(--brand);
           color: #ffffff;
-          border-color: var(--accent);
+          border-color: var(--brand);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.25);
         }}
 
-        .filter-btn-search:hover {{ background: var(--accent-dark); }}
+        .filter-btn-search:hover {{ background: var(--brand-dark); }}
 
         .filter-btn-reset {{
           background: transparent;
@@ -1186,6 +1260,9 @@ def run_briefing():
           font-size: 0.68em;
           color: var(--text-dim);
           margin-left: auto;
+          /* 배지가 많은 행에서 날짜가 두 줄로 쪼개지지 않도록 한다 */
+          white-space: nowrap;
+          font-variant-numeric: tabular-nums;
         }}
 
         .bucket-header {{
@@ -1396,6 +1473,44 @@ def run_briefing():
           {{ key: 'etc', title: '④ 기타' }},
         ];
 
+        // 카테고리 아이콘. 이모지는 OS마다 모양·색이 달라 정보 위계를 흐리므로
+        // 1.5px 선 굵기의 단색 아이콘으로 대체한다. 위에서부터 먼저 맞는 규칙을 쓴다.
+        const ICON_PATHS = {{
+          pulse:     '<path d="M3 12h3l2.5-6 4 13 3-9.5L18 12h3"/>',
+          district:  '<path d="M4 21V6l7-3v18M11 21h9V10l-9-4"/><path d="M15 11h.01M15 15h.01M15 19h.01M7 9h.01M7 13h.01M7 17h.01"/>',
+          academy:   '<path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="M5 10v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/>',
+          guarantee: '<path d="M12 3 4 6v6c0 5 3.4 8.2 8 9 4.6-.8 8-4 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/>',
+          notice:    '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>',
+          cadastre:  '<path d="m9 4-6 3v13l6-3 6 3 6-3V4l-6 3-6-3Z"/><path d="M9 4v13M15 7v13"/>',
+          discourse: '<path d="M21 12a8 8 0 0 1-11.5 7.2L3 21l1.8-6.5A8 8 0 1 1 21 12Z"/><path d="M8.5 11h7M8.5 14.5h4"/>',
+          statute:   '<path d="M12 4v16M5 8h14M7 8l-3 6a3.2 3.2 0 0 0 6 0L7 8ZM17 8l-3 6a3.2 3.2 0 0 0 6 0l-3-6Z"/>',
+          bell:      '<path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
+        }};
+
+        const ICON_RULES = [
+          ['위기징후',   'pulse'],
+          ['임대보증',   'guarantee'],
+          ['학교',       'academy'],
+          ['도시계획고시','cadastre'],
+          ['자치법규',   'statute'],
+          ['입법예고',   'statute'],
+          ['공고',       'notice'],
+          ['공지사항',   'bell'],
+          ['지역여론',   'discourse'],
+          ['일반동향',   'district'],
+        ];
+
+        function iconFor(category) {{
+          const hit = ICON_RULES.find(([kw]) => category.indexOf(kw) !== -1);
+          const path = ICON_PATHS[hit ? hit[1] : 'notice'];
+          return `<span class="card-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${{path}}</svg></span>`;
+        }}
+
+        // 카테고리명 앞의 이모지와 변이 선택자를 걷어낸다 (아이콘이 그 역할을 대신한다).
+        function stripEmoji(text) {{
+          return text.replace(/[\\u{{1F300}}-\\u{{1FAFF}}\\u{{2600}}-\\u{{27BF}}\\u{{FE0F}}\\u{{20E3}}]/gu, '').trim();
+        }}
+
         function hasWarning(item) {{
           const text = item['제목'] + ' ' + item['요약'];
           return warningRules.some(rule => rule.every(kw => text.includes(kw)));
@@ -1450,10 +1565,10 @@ def run_briefing():
 
         function renderItem(item, filterTerm) {{
           const badgeClass = item['출처'] === '뉴스' ? 'badge-news' : (item['출처'] === '카페' ? 'badge-cafe' : 'badge-official');
-          const warningBadge = hasWarning(item) ? `<span class="badge badge-warning">🚨 주의</span>` : '';
-          const newBadge = item['신규'] ? `<span class="badge badge-new">🆕 NEW</span>` : '';
+          const warningBadge = hasWarning(item) ? `<span class="badge badge-warning">주의</span>` : '';
+          const newBadge = item['신규'] ? `<span class="badge badge-new">신규</span>` : '';
           const streakBadge = (!item['신규'] && item['발견일수'] >= 2)
-            ? `<span class="badge badge-streak">🔁 ${{item['발견일수']}}일째</span>`
+            ? `<span class="badge badge-streak">${{item['발견일수']}}일째</span>`
             : '';
           const dupList = item['관련보도목록'] || [];
           const dupId = `dup-${{dupIdCounter++}}`;
@@ -1532,8 +1647,8 @@ def run_briefing():
 
           statsRow.innerHTML = `
             <div class="stat-tile"><div class="label">총 수집 건수</div><div class="value">${{total}}</div></div>
-            <div class="stat-tile risk"><div class="label">🚨 주의 신호</div><div class="value">${{riskCount}}</div></div>
-            <div class="stat-tile new"><div class="label">🆕 신규 항목</div><div class="value">${{newCount}}</div></div>
+            <div class="stat-tile risk"><div class="label">주의 신호</div><div class="value">${{riskCount}}</div></div>
+            <div class="stat-tile new"><div class="label">신규 항목</div><div class="value">${{newCount}}</div></div>
             <div class="stat-tile"><div class="label">모니터링 카테고리</div><div class="value">${{categories}}</div></div>
             <div class="stat-tile"><div class="label">마지막 수집 일시</div><div class="value" style="font-size:1.05em;">${{lastUpdate}}</div></div>
             <div class="stat-tile clock"><div class="label">현재 시각</div><div class="value" id="liveClockValue">--:--:--</div></div>
@@ -1623,7 +1738,8 @@ def run_briefing():
                 bodyHtml += `
                   <div class="card">
                     <div class="card-header">
-                      <h2>${{category}}</h2>
+                      ${{iconFor(category)}}
+                      <h2>${{stripEmoji(category)}}</h2>
                       <span class="card-count">${{items.length}}</span>
                     </div>
                     <div class="card-body">${{cardBody}}</div>
