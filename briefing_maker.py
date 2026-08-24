@@ -642,39 +642,46 @@ def run_briefing():
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&display=swap">
       <style>
         :root {{
-          --bg-page: #eef0f3;
+          /* 세이지 그린 계열. 회색 대신 초록기가 도는 중성색을 쓴다. */
+          --bg-page: #e7efe4;
           --bg: #ffffff;
-          --bg-subtle: #f7f8fa;
-          --border: #dde1e7;
-          --border-strong: #c7cdd6;
-          --text-primary: #16191f;
-          --text-secondary: #6b7382;
-          --text-dim: #98a0ad;
+          --bg-subtle: #f3f8f1;
+          --border: #d5e3d1;
+          --border-strong: #b6cbb1;
+          --text-primary: #1a2a1e;
+          --text-secondary: #52684f;
+          --text-dim: #879a84;
 
-          /* 구조색: 아이콘·출처 배지·링크 hover */
-          --accent: #24506b;
-          --accent-dark: #1a3d53;
-          --accent-soft: #e8eff4;
-          --accent-line: #b6c9d6;
+          /* 구조색: 아이콘·카드 제목·출처 배지 */
+          --accent: #2f6b45;
+          --accent-dark: #245236;
+          --accent-soft: #e2f0e6;
+          --accent-line: #aed3bc;
 
-          /* 브랜드색: CJ 마크와 검색 버튼에만 쓴다 */
-          --brand: #d9531e;
-          --brand-dark: #b84415;
+          /* 브랜드색: CJ 마크와 검색 버튼 */
+          --brand: #c2571c;
+          --brand-dark: #a04716;
 
-          /* 의미색 */
-          --accent-green: #1b6b47;
-          --green-soft: #e6f2ec;
-          --green-line: #b7d9c7;
-          --accent-red: #b3261e;
-          --red-soft: #fbeae8;
-          --red-line: #ebc2bd;
-          --accent-blue: #24506b;
+          /* 의미색 — 배지끼리 색상이 겹치지 않도록 계열을 나눈다 */
+          --accent-green: #2f6b45;   /* 뉴스 */
+          --green-soft: #e2f0e6;
+          --green-line: #aed3bc;
+          --cafe: #2a5f7a;           /* 카페 */
+          --cafe-soft: #e5eff4;
+          --cafe-line: #b3cddd;
+          --new: #b5540f;            /* 신규 */
+          --new-soft: #fcefe3;
+          --new-line: #eecdad;
+          --accent-red: #a8291f;     /* 주의 */
+          --red-soft: #fae9e7;
+          --red-line: #e6bfba;
+          --accent-blue: #2a5f7a;
 
-          /* B1 융기 괘선 */
-          --rule-top: #3d444f;
-          --rule-bottom: #16191f;
+          /* B1 융기 괘선 — 짙은 상록 계열 */
+          --rule-top: #3f7554;
+          --rule-bottom: #1c3b28;
           --gloss: rgba(255,255,255,.9);
-          --cast: rgba(22,25,31,.22);
+          --cast: rgba(26,42,30,.24);
 
           --mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
           --sans: 'IBM Plex Sans KR', 'Segoe UI', 'Pretendard', 'Malgun Gothic', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
@@ -696,7 +703,7 @@ def run_briefing():
           align-items: center;
           justify-content: space-between;
           padding: 16px 28px;
-          border-bottom: 2px solid var(--text-primary);
+          border-bottom: 2px solid var(--rule-bottom);
           background: var(--bg);
           position: sticky;
           top: 0;
@@ -795,7 +802,7 @@ def run_briefing():
         }}
 
         .stat-tile.risk .value {{ color: var(--accent-red); }}
-        .stat-tile.new .value {{ color: var(--accent-green); }}
+        .stat-tile.new .value {{ color: var(--new); }}
         .stat-tile.clock .value {{ font-family: var(--mono); color: var(--accent); font-size: 1.3em; }}
 
         .columns {{
@@ -929,8 +936,8 @@ def run_briefing():
           white-space: nowrap;
         }}
 
-        .badge-news {{ background: var(--accent-soft); color: var(--accent); border-color: var(--accent-line); }}
-        .badge-cafe {{ background: var(--green-soft); color: var(--accent-green); border-color: var(--green-line); }}
+        .badge-news {{ background: var(--green-soft); color: var(--accent-green); border-color: var(--green-line); }}
+        .badge-cafe {{ background: var(--cafe-soft); color: var(--cafe); border-color: var(--cafe-line); }}
         .badge-official {{ background: var(--bg-subtle); color: var(--text-secondary); border-color: var(--border-strong); }}
         .badge-warning {{
           background: var(--red-soft);
@@ -939,16 +946,11 @@ def run_briefing():
         }}
 
         .badge-new {{
-          background: var(--green-soft);
-          color: var(--accent-green);
-          border-color: var(--green-line);
+          background: var(--new-soft);
+          color: var(--new);
+          border-color: var(--new-line);
         }}
 
-        .badge-streak {{
-          background: var(--bg-subtle);
-          color: var(--text-secondary);
-          border-color: var(--border-strong);
-        }}
 
         .badge-dup {{
           background: var(--bg-subtle);
@@ -1099,7 +1101,7 @@ def run_briefing():
           white-space: nowrap;
         }}
 
-        .rule-tag-custom {{ color: var(--accent-green); border-color: #b9e3ca; }}
+        .rule-tag-custom {{ color: var(--accent-green); border-color: var(--green-line); }}
 
         .rule-remove-btn {{
           font-size: 0.78em;
@@ -1332,8 +1334,8 @@ def run_briefing():
           align-items: center;
           gap: 6px;
           color: var(--accent-green);
-          border: 1px solid #b9e3ca;
-          background: #e8f6ee;
+          border: 1px solid var(--green-line);
+          background: var(--green-soft);
           padding: 5px 12px;
           border-radius: 3px;
           margin-bottom: 12px;
@@ -1584,9 +1586,6 @@ def run_briefing():
           const badgeClass = item['출처'] === '뉴스' ? 'badge-news' : (item['출처'] === '카페' ? 'badge-cafe' : 'badge-official');
           const warningBadge = hasWarning(item) ? `<span class="badge badge-warning">주의</span>` : '';
           const newBadge = item['신규'] ? `<span class="badge badge-new">신규</span>` : '';
-          const streakBadge = (!item['신규'] && item['발견일수'] >= 2)
-            ? `<span class="badge badge-streak">${{item['발견일수']}}일째</span>`
-            : '';
           const dupList = item['관련보도목록'] || [];
           const dupId = `dup-${{dupIdCounter++}}`;
           const dupBadge = dupList.length > 0
@@ -1611,7 +1610,7 @@ def run_briefing():
           return `
             <div class="item">
               <div class="item-top">
-                <span class="badge ${{badgeClass}}">${{item['출처']}}</span>${{warningBadge}}${{newBadge}}${{streakBadge}}${{dupBadge}}${{dateTag}}
+                <span class="badge ${{badgeClass}}">${{item['출처']}}</span>${{warningBadge}}${{newBadge}}${{dupBadge}}${{dateTag}}
               </div>
               <a href="${{item['링크']}}" target="_blank" class="item-title">${{displayTitle}}</a>
               <div class="item-desc">${{displayDesc}}</div>
