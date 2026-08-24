@@ -276,7 +276,7 @@ def fetch_hug(keyword, category, now_str):
         print(f" [오류] {category} 수집 실패: {e}")
     return results
 
-# 3열(카페 동향)에서 감시할 지역 카페 목록. 네이버 카페글 검색 API는 특정 카페로
+# '지역여론' 카테고리에서 감시할 지역 카페 목록. 네이버 카페글 검색 API는 특정 카페로
 # 검색 범위를 제한할 수 없으므로, 부동산/개발 관련 키워드로 넓게 검색한 뒤
 # 응답의 cafeurl이 아래 목록에 해당하는 글만 걸러낸다.
 TARGET_CAFES = [
@@ -331,16 +331,16 @@ def fetch_target_cafes(cafe_urls, queries, category, now_str):
 # 매핑에 없는 분류는 자동으로 '기타' 열로 들어간다.
 CATEGORY_COLUMN = {
     "🚨 [위기징후] 건설사·아파트 리스크": "news",
-    "🏫 [학교/교육] 학생배치 동향": "news",
     "🏢 [일반동향] 충주 부동산": "news",
-    "🚨 [위기징후] HUG 보증사고·반환지연 민원": "news",
     "🏙️ [도시계획고시] 토지이음 (충주)": "notice",
     "📜 [자치법규] 입법예고 (충주시)": "notice",
     "📜 [자치법규] 입법예고 (충청북도 도단위)": "notice",
     "📢 [공지사항] 충주시청": "notice",
     "📜 [입법예고] 충주시청": "notice",
     "📋 [공고/고시/입찰] 충주시청": "notice",
-    "☕ [카페동향] 지정카페": "cafe",
+    "🏫 [학교/교육] 학생배치 동향": "school",
+    "🏠 [임대보증] HUG 보증사고·반환지연 민원": "school",
+    "🗣️ [지역여론] 커뮤니티": "etc",
 }
 
 def assign_columns(all_collected_data):
@@ -407,6 +407,20 @@ def dedupe_similar_news(items, title_threshold=TITLE_SIMILARITY_THRESHOLD):
                 for g in group[1:]
             ]
         result.append(rep)
+    return result
+
+def dedupe_by_link(all_collected_data):
+    """같은 카테고리 안에서 링크가 겹치는 항목 제거.
+    '지역여론' 카테고리는 지정카페 수집과 일반 카페 검색 두 경로로 채워지므로
+    동일 게시글이 두 번 들어올 수 있다."""
+    seen = set()
+    result = []
+    for item in all_collected_data:
+        key = (item["분류"], item["링크"])
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
     return result
 
 def dedupe_similar_news_in_categories(all_collected_data):
@@ -484,7 +498,7 @@ def run_briefing():
                 "입주 지연", "보증금 반환", "부실시공", "하자", "PF", "준공"
             ]
         },
-        {"category": "🗣️ [지역여론] 커뮤니티 (분양/갈등)", "type": "cafearticle", "queries": ["충주 분양 전환", "충주 허그 보증금", "충주 분양 지연", "충주 아파트 취소"]},
+        {"category": "🗣️ [지역여론] 커뮤니티", "type": "cafearticle", "queries": ["충주 분양 전환", "충주 허그 보증금", "충주 분양 지연", "충주 아파트 취소"]},
         {"category": "🏫 [학교/교육] 학생배치 동향", "type": "news", "queries": ["충주 초등학교 신설", "충주 중학교 배치", "서충주 과밀학급"]},
         {"category": "🏢 [일반동향] 충주 부동산", "type": "news", "queries": ["충주 아파트 분양", "서충주 신도시", "충주 공동주택"]}
     ]
@@ -535,14 +549,15 @@ def run_briefing():
 
         print(f" - {target['category']}: {found_count}건 발견")
 
-    # 1-0. 지정 지역 카페 5곳의 부동산/개발 관련 글 (3열 '카페 동향' 전용)
-    cafe_category = "☕ [카페동향] 지정카페"
+    # 1-0. 지정 지역 카페 5곳의 부동산/개발 관련 글.
+    # 네이버 카페 검색으로 모은 '지역여론' 항목과 같은 카테고리로 합쳐서 보여준다.
+    cafe_category = "🗣️ [지역여론] 커뮤니티"
     cafe_items = fetch_target_cafes(TARGET_CAFES, CAFE_QUERIES, cafe_category, now_str)
     all_collected_data.extend(cafe_items)
-    print(f" - {cafe_category}: {len(cafe_items)}건 발견")
+    print(f" - {cafe_category}(지정카페): {len(cafe_items)}건 발견")
 
     # 1-1. HUG(주택도시보증공사) 문의/민원 게시판 - 보증사고·반환지연 등 1차 민원 데이터
-    hug_category = "🚨 [위기징후] HUG 보증사고·반환지연 민원"
+    hug_category = "🏠 [임대보증] HUG 보증사고·반환지연 민원"
     hug_items = fetch_hug("충주", hug_category, now_str)
     all_collected_data.extend(hug_items)
     print(f" - {hug_category}: {len(hug_items)}건 발견")
@@ -578,6 +593,7 @@ def run_briefing():
         print(f" - {board['category']}: {len(items)}건 발견")
 
     # 5. 지난 실행 대비 신규 항목 판정
+    all_collected_data = dedupe_by_link(all_collected_data)
     all_collected_data = dedupe_similar_news_in_categories(all_collected_data)
     assign_columns(all_collected_data)
     apply_history(all_collected_data, now_str)
@@ -1396,9 +1412,9 @@ def run_briefing():
         recomputeWarningRules();
 
         const columnDefs = [
-          {{ key: 'news', title: '① 뉴스 · HUG 게시판' }},
+          {{ key: 'news', title: '① 뉴스' }},
           {{ key: 'notice', title: '② 공시 · 충주시청 알림' }},
-          {{ key: 'cafe', title: '③ 카페 동향' }},
+          {{ key: 'school', title: '③ 학교 / 공동주택' }},
           {{ key: 'etc', title: '④ 기타' }},
         ];
 
