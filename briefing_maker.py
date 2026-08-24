@@ -17,6 +17,11 @@ import time
 SOCKET_TIMEOUT_SEC = 20
 socket.setdefaulttimeout(SOCKET_TIMEOUT_SEC)
 
+# 게시판 하나를 키워드별로 여러 번 조회하는데, 해당 사이트가 통째로 응답하지 않으면
+# 키워드 수만큼 타임아웃을 기다리느라 실행이 10분 넘게 늘어진다(실측 13분).
+# 연속으로 이만큼 실패하면 그 게시판은 포기하고 다음 수집으로 넘어간다.
+CONSECUTIVE_FAILURE_LIMIT = 3
+
 # 1. 네이버 API 키
 # 로컬 실행 시에는 아래 기본값을 쓰고, GitHub Actions에서는 저장소 Secrets(NAVER_CLIENT_ID/SECRET)로
 # 덮어써서 키가 코드/공개 저장소에 그대로 노출되지 않도록 한다.
@@ -163,7 +168,11 @@ def fetch_chungju_bbs(key, bbs_no, category, now_str):
     )
     results = []
     seen_links = set()
+    consecutive_failures = 0
     for kw in SEARCH_KEYWORDS:
+        if consecutive_failures >= CONSECUTIVE_FAILURE_LIMIT:
+            print(f" [중단] {category}: 연속 {consecutive_failures}회 실패로 남은 키워드 건너뜀")
+            break
         url = (
             f"https://www.chungju.go.kr/www/selectBbsNttList.do?bbsNo={bbs_no}&key={key}"
             f"&searchCtgry=&searchCnd=&searchKrwd={urllib.parse.quote(kw)}"
@@ -172,6 +181,7 @@ def fetch_chungju_bbs(key, bbs_no, category, now_str):
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             response = urllib.request.urlopen(req, context=ctx)
             html = response.read().decode('utf-8')
+            consecutive_failures = 0
             for m in pattern.finditer(html):
                 detail_url = f"https://www.chungju.go.kr/www/selectBbsNttView.do?key={key}&bbsNo={bbs_no}&nttNo={m.group('nttno')}"
                 if detail_url in seen_links:
@@ -188,6 +198,7 @@ def fetch_chungju_bbs(key, bbs_no, category, now_str):
                     "링크": detail_url
                 })
         except Exception as e:
+            consecutive_failures += 1
             print(f" [오류] {category} 수집 실패 ({kw}): {e}")
     return results
 
@@ -205,7 +216,11 @@ def fetch_chungju_eminwon(key, ancmt_se_code, category, now_str):
     )
     results = []
     seen_links = set()
+    consecutive_failures = 0
     for kw in SEARCH_KEYWORDS:
+        if consecutive_failures >= CONSECUTIVE_FAILURE_LIMIT:
+            print(f" [중단] {category}: 연속 {consecutive_failures}회 실패로 남은 키워드 건너뜀")
+            break
         url = (
             f"https://www.chungju.go.kr/www/selectEminwonList.do?key={key}&ofr_pageSize=10"
             f"&ancmt_se_code={ancmt_se_code}&pageIndex=1&ancmt_sj={urllib.parse.quote(kw)}"
@@ -214,6 +229,7 @@ def fetch_chungju_eminwon(key, ancmt_se_code, category, now_str):
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             response = urllib.request.urlopen(req, context=ctx)
             html = response.read().decode('utf-8')
+            consecutive_failures = 0
             for m in pattern.finditer(html):
                 # href에는 검색에 쓰인 키워드(ancmt_sj)가 그대로 echo되어 있어
                 # 검색어마다 링크 문자열이 달라진다. 게시물 고유번호(ancmt_mgt_no)만
@@ -236,6 +252,7 @@ def fetch_chungju_eminwon(key, ancmt_se_code, category, now_str):
                     "링크": detail_url
                 })
         except Exception as e:
+            consecutive_failures += 1
             print(f" [오류] {category} 수집 실패 ({kw}): {e}")
     return results
 
