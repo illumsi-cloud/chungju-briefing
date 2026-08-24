@@ -408,15 +408,16 @@ def fetch_target_cafes(cafe_urls, queries, category, now_str):
 CATEGORY_COLUMN = {
     "🚨 [위기징후] 건설사·아파트 리스크": "news",
     "🏢 [일반동향] 충주 부동산": "news",
+    "📢 [공지사항] 충주시청": "news",
     "🏙️ [도시계획고시] 토지이음 (충주)": "notice",
     "📜 [자치법규] 입법예고 (충주시)": "notice",
     "📜 [자치법규] 입법예고 (충청북도 도단위)": "notice",
-    "📢 [공지사항] 충주시청": "notice",
     "📜 [입법예고] 충주시청": "notice",
     "📋 [공고/고시/입찰] 충주시청": "notice",
     "🏫 [학교/교육] 학생배치 동향": "school",
     "🏠 [임대보증] HUG 보증사고·반환지연 민원": "school",
-    "🗣️ [지역여론] 커뮤니티": "etc",
+    "🗣️ [지역여론] 맘카페": "etc",
+    "🗣️ [지역여론] 부동산 커뮤니티": "etc",
 }
 
 def assign_columns(all_collected_data):
@@ -486,9 +487,7 @@ def dedupe_similar_news(items, title_threshold=TITLE_SIMILARITY_THRESHOLD):
     return result
 
 def dedupe_by_link(all_collected_data):
-    """같은 카테고리 안에서 링크가 겹치는 항목 제거.
-    '지역여론' 카테고리는 지정카페 수집과 일반 카페 검색 두 경로로 채워지므로
-    동일 게시글이 두 번 들어올 수 있다."""
+    """같은 카테고리 안에서 링크가 겹치는 항목 제거."""
     seen = set()
     result = []
     for item in all_collected_data:
@@ -575,7 +574,7 @@ def run_briefing():
                 "입주 지연", "보증금 반환", "부실시공", "하자", "PF", "준공"
             ]
         },
-        {"category": "🗣️ [지역여론] 커뮤니티", "type": "cafearticle", "queries": ["충주 분양 전환", "충주 허그 보증금", "충주 분양 지연", "충주 아파트 취소"]},
+        {"category": "🗣️ [지역여론] 부동산 커뮤니티", "type": "cafearticle", "queries": ["충주 분양 전환", "충주 허그 보증금", "충주 분양 지연", "충주 아파트 취소"]},
         {"category": "🏫 [학교/교육] 학생배치 동향", "type": "news", "queries": ["충주 초등학교 신설", "충주 중학교 배치", "서충주 과밀학급"]},
         {"category": "🏢 [일반동향] 충주 부동산", "type": "news", "queries": ["충주 아파트 분양", "서충주 신도시", "충주 공동주택"]}
     ]
@@ -626,12 +625,12 @@ def run_briefing():
 
         print(f" - {target['category']}: {found_count}건 발견")
 
-    # 1-0. 지정 지역 카페 5곳의 부동산/개발 관련 글.
-    # 네이버 카페 검색으로 모은 '지역여론' 항목과 같은 카테고리로 합쳐서 보여준다.
-    cafe_category = "🗣️ [지역여론] 커뮤니티"
+    # 1-0. 지정 지역 맘카페 5곳의 부동산/개발 관련 글.
+    # 일반 카페 검색('부동산 커뮤니티')과는 별도 카테고리로 분리해 상자를 나눈다.
+    cafe_category = "🗣️ [지역여론] 맘카페"
     cafe_items = fetch_target_cafes(TARGET_CAFES, CAFE_QUERIES, cafe_category, now_str)
     all_collected_data.extend(cafe_items)
-    print(f" - {cafe_category}(지정카페): {len(cafe_items)}건 발견")
+    print(f" - {cafe_category}: {len(cafe_items)}건 발견")
 
     # 1-1. HUG(주택도시보증공사) 문의/민원 게시판 - 보증사고·반환지연 등 1차 민원 데이터
     hug_category = "🏠 [임대보증] HUG 보증사고·반환지연 민원"
@@ -1560,6 +1559,21 @@ def run_briefing():
           {{ key: 'etc', title: '④ 기타' }},
         ];
 
+        // 열 안에서 카드(카테고리 상자)가 뜨는 순서. 실제 데이터 등장 순서에 맡기면
+        // 날짜에 따라 상자 순서가 흔들리므로, 원하는 순서를 명시적으로 고정한다.
+        // 카테고리명에 이 키워드가 포함되면 매칭되고, 목록에 없으면 맨 뒤로 간다.
+        const CATEGORY_ORDER = [
+          '위기징후', '일반동향', '공지사항',
+          '도시계획고시', '자치법규', '입법예고', '공고',
+          '학교', '임대보증',
+          '맘카페', '부동산 커뮤니티',
+        ];
+
+        function categoryOrderIndex(category) {{
+          const idx = CATEGORY_ORDER.findIndex(kw => category.indexOf(kw) !== -1);
+          return idx === -1 ? CATEGORY_ORDER.length : idx;
+        }}
+
         // 카테고리 아이콘. 이모지는 OS마다 모양·색이 달라 정보 위계를 흐리므로
         // 1.5px 선 굵기의 단색 아이콘으로 대체한다. 위에서부터 먼저 맞는 규칙을 쓴다.
         const ICON_PATHS = {{
@@ -1823,7 +1837,9 @@ def run_briefing():
             if (colItems.length === 0) {{
               bodyHtml = '<div class="empty-state">// 해당 없음 //</div>';
             }} else {{
-              for (const [category, items] of Object.entries(groupedData)) {{
+              const orderedEntries = Object.entries(groupedData)
+                .sort((a, b) => categoryOrderIndex(a[0]) - categoryOrderIndex(b[0]));
+              for (const [category, items] of orderedEntries) {{
                 const cardBody = renderCardBody(category, items, term);
                 bodyHtml += `
                   <div class="card">
