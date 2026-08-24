@@ -710,8 +710,9 @@ def run_briefing():
           --accent-soft: #e2f0e6;
           --accent-line: #aed3bc;
 
-          /* 브랜드색: CJ 마크와 검색 버튼 */
+          /* 브랜드색: CJ 마크·검색 버튼·마스트헤드 버튼들 */
           --brand: #c2571c;
+          --brand-light: #e2822a;
           --brand-dark: #a04716;
 
           /* 의미색 — 배지끼리 색상이 겹치지 않도록 계열을 나눈다 */
@@ -739,7 +740,6 @@ def run_briefing():
           --navy: #1e2530;
           --navy-light: #34435a;
           --navy-dark: #12161d;
-          --navy-line: rgba(18,22,29,.32);
 
           --mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
           --sans: 'IBM Plex Sans KR', 'Segoe UI', 'Pretendard', 'Malgun Gothic', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
@@ -765,10 +765,8 @@ def run_briefing():
           align-items: center;
           justify-content: space-between;
           padding: 16px 28px;
-          border-bottom: 1px solid var(--navy-line);
-          background: transparent;
-          backdrop-filter: blur(6px);
-          -webkit-backdrop-filter: blur(6px);
+          background: linear-gradient(115deg, var(--navy-light) 0%, var(--navy) 55%, var(--navy-dark) 100%);
+          box-shadow: 0 2px 10px -2px rgba(12,14,18,.4);
           position: sticky;
           top: 0;
           z-index: 10;
@@ -783,10 +781,10 @@ def run_briefing():
           font-family: var(--sans);
           font-weight: 700;
           font-size: 0.95em;
-          background: linear-gradient(135deg, var(--navy-light) 0%, var(--navy) 55%, var(--navy-dark) 100%);
+          background: linear-gradient(135deg, var(--brand-light) 0%, var(--brand) 55%, var(--brand-dark) 100%);
           color: #ffffff;
           letter-spacing: 0.5px;
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 2px 5px rgba(12,14,18,.35);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 2px 5px rgba(12,14,18,.3);
         }}
 
         .brand h1 {{
@@ -794,39 +792,38 @@ def run_briefing():
           font-size: 1.2em;
           font-weight: 700;
           letter-spacing: -0.2px;
-          color: var(--text-primary);
+          color: #ffffff;
         }}
 
         .brand .sub {{
           font-family: var(--mono);
           font-size: 0.7em;
-          color: var(--text-dim);
+          color: rgba(255,255,255,.6);
           letter-spacing: 0.5px;
           margin-top: 2px;
         }}
 
-        .live-indicator {{
-          display: flex; align-items: center; gap: 7px;
-          font-family: var(--mono);
-          font-size: 0.76em;
+        .refresh-btn {{
+          display: inline-flex; align-items: center; gap: 6px;
+          font-family: var(--sans);
+          font-size: 0.78em;
           font-weight: 700;
           color: #ffffff;
-          background: linear-gradient(135deg, var(--navy-light) 0%, var(--navy) 55%, var(--navy-dark) 100%);
-          border: 1px solid var(--navy-dark);
-          padding: 5px 11px;
+          background: linear-gradient(135deg, var(--brand-light) 0%, var(--brand) 55%, var(--brand-dark) 100%);
+          border: 1px solid var(--brand-dark);
+          padding: 6px 13px;
           border-radius: 3px;
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 2px 5px rgba(12,14,18,.3);
+          cursor: pointer;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 2px 5px rgba(12,14,18,.3);
         }}
 
-        .live-indicator .dot {{
-          width: 6px; height: 6px; border-radius: 50%;
-          background: #ffffff;
-          animation: pulse 2s ease-in-out infinite;
-        }}
+        .refresh-btn svg {{ width: 13px; height: 13px; }}
+        .refresh-btn:hover {{ filter: brightness(1.1); }}
+        .refresh-btn:active svg {{ animation: spin 0.5s linear; }}
 
-        @keyframes pulse {{
-          0%, 100% {{ opacity: 1; }}
-          50% {{ opacity: 0.35; }}
+        @keyframes spin {{
+          from {{ transform: rotate(0deg); }}
+          to {{ transform: rotate(360deg); }}
         }}
 
         .stats-row {{
@@ -1073,12 +1070,12 @@ def run_briefing():
           font-size: 0.78em;
           font-weight: 700;
           color: #ffffff;
-          background: linear-gradient(135deg, var(--navy-light) 0%, var(--navy) 55%, var(--navy-dark) 100%);
-          border: 1px solid var(--navy-dark);
+          background: linear-gradient(135deg, var(--brand-light) 0%, var(--brand) 55%, var(--brand-dark) 100%);
+          border: 1px solid var(--brand-dark);
           border-radius: 3px;
           padding: 6px 12px;
           cursor: pointer;
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 2px 5px rgba(12,14,18,.3);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 2px 5px rgba(12,14,18,.3);
         }}
 
         .settings-btn:hover {{ filter: brightness(1.15); }}
@@ -1322,13 +1319,13 @@ def run_briefing():
         .filter-btn:active {{ transform: scale(0.97); }}
 
         .filter-btn-search {{
-          background: var(--brand);
+          background: linear-gradient(135deg, var(--brand-light) 0%, var(--brand) 55%, var(--brand-dark) 100%);
           color: #ffffff;
-          border-color: var(--brand);
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.25);
+          border-color: var(--brand-dark);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 2px 5px rgba(12,14,18,.2);
         }}
 
-        .filter-btn-search:hover {{ background: var(--brand-dark); }}
+        .filter-btn-search:hover {{ filter: brightness(1.1); }}
 
         .filter-btn-reset {{
           background: transparent;
@@ -1454,7 +1451,10 @@ def run_briefing():
         </div>
         <div class="topbar-right">
           <button type="button" class="settings-btn" id="warningSettingsBtn">⚙ 주의어 설정</button>
-          <div class="live-indicator"><span class="dot"></span>자동 갱신 중</div>
+          <button type="button" class="refresh-btn" id="refreshBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+            갱신
+          </button>
         </div>
       </div>
 
@@ -1986,6 +1986,7 @@ def run_briefing():
             if (badge) toggleDupList(badge);
           }});
 
+          document.getElementById('refreshBtn').addEventListener('click', () => location.reload());
           document.getElementById('warningSettingsBtn').addEventListener('click', openWarningSettings);
           document.getElementById('warningSettingsCloseBtn').addEventListener('click', closeWarningSettings);
           document.getElementById('warningSettingsOverlay').addEventListener('click', e => {{
