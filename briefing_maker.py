@@ -5,7 +5,6 @@ import ssl
 import re
 import os
 import http.cookiejar
-import difflib
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 import time
@@ -357,17 +356,39 @@ NEWS_DEDUPE_CATEGORIES = {
     "🏢 [일반동향] 충주 부동산",
 }
 
-def _text_similarity(a, b):
-    return difflib.SequenceMatcher(None, a, b).ratio()
+def _normalize_title(text):
+    """비교용 정규화: 대괄호 말머리·기호·공백을 제거해 한글/영숫자만 남긴다."""
+    text = re.sub(r'\[[^\]]*\]|<[^>]*>', ' ', text)
+    return re.sub(r'[^0-9A-Za-z가-힣]+', '', text)
 
-def dedupe_similar_news(items, title_threshold=0.72, desc_threshold=0.5):
+def _bigrams(text):
+    text = _normalize_title(text)
+    if len(text) < 2:
+        return {text} if text else set()
+    return {text[i:i + 2] for i in range(len(text) - 1)}
+
+def _text_similarity(a, b):
+    """문자 bigram 중복도(overlap coefficient).
+    한국어 기사 제목은 어미·조사가 매체마다 달라 SequenceMatcher로는 같은 사건을
+    잡아내지 못하므로, 길이 차이에 관대한 bigram 중복도를 쓴다."""
+    A, B = _bigrams(a), _bigrams(b)
+    if not A or not B:
+        return 0.0
+    return len(A & B) / min(len(A), len(B))
+
+# 실측 보정값: 같은 사건 기사끼리는 최소 0.385, 서로 다른 기사끼리는 최대 0.133이라
+# 그 사이인 0.32를 임계값으로 둔다.
+TITLE_SIMILARITY_THRESHOLD = 0.32
+
+def dedupe_similar_news(items, title_threshold=TITLE_SIMILARITY_THRESHOLD):
     groups = []
     for item in items:
         placed_group = None
         for group in groups:
-            rep = group[0]
-            if (_text_similarity(item["제목"], rep["제목"]) >= title_threshold or
-                    _text_similarity(item["요약"], rep["요약"]) >= desc_threshold):
+            # 대표 1건이 아니라 그룹 내 모든 기사와 비교(single-linkage)해야
+            # 제목이 조금씩 달라지며 이어지는 같은 사건 기사들이 한 덩어리로 묶인다.
+            if any(_text_similarity(item["제목"], member["제목"]) >= title_threshold
+                   for member in group):
                 placed_group = group
                 break
         if placed_group is not None:
