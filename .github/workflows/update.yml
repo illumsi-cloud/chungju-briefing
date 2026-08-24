@@ -19,6 +19,9 @@ concurrency:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    # 수집 대상 사이트가 응답하지 않아 작업이 매달리면 concurrency 락을 계속 쥐고 있어
+    # 이후 실행까지 모두 대기 상태가 된다. 정상 실행은 3분 이내이므로 넉넉히 15분으로 제한한다.
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

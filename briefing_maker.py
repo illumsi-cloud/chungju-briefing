@@ -4,10 +4,18 @@ import json
 import ssl
 import re
 import os
+import socket
 import http.cookiejar
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 import time
+
+# 관공서 사이트가 연결만 받아두고 응답하지 않으면 urlopen이 무한 대기하면서
+# 수집 전체가 멈춘다(실제로 GitHub Actions 실행이 40분 넘게 걸린 적이 있다).
+# 소켓 기본 타임아웃을 걸어두면 응답 없는 사이트는 예외로 떨어지고,
+# 각 수집 함수의 try/except가 이를 잡아 나머지 수집은 계속된다.
+SOCKET_TIMEOUT_SEC = 20
+socket.setdefaulttimeout(SOCKET_TIMEOUT_SEC)
 
 # 1. 네이버 API 키
 # 로컬 실행 시에는 아래 기본값을 쓰고, GitHub Actions에서는 저장소 Secrets(NAVER_CLIENT_ID/SECRET)로
