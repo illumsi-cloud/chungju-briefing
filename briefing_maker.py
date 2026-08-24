@@ -695,15 +695,15 @@ def run_briefing():
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&display=swap">
       <style>
         :root {{
-          /* 세이지 그린 계열. 회색 대신 초록기가 도는 중성색을 쓴다. */
-          --bg-page: #e7efe4;
+          /* 브러시드 메탈 지면: 결(줄무늬) 없이 부드러운 방향성 그라데이션만 쓴다. */
+          --bg-page: linear-gradient(155deg, #fafbfc 0%, #dde2e6 30%, #eef1f3 48%, #c7ced4 62%, #f2f4f6 78%, #d3d9de 100%);
           --bg: #ffffff;
-          --bg-subtle: #f3f8f1;
-          --border: #d5e3d1;
-          --border-strong: #b6cbb1;
-          --text-primary: #1a2a1e;
-          --text-secondary: #52684f;
-          --text-dim: #879a84;
+          --bg-subtle: #f5f7f8;
+          --border: #d3d9de;
+          --border-strong: #b7bfc6;
+          --text-primary: #14181b;
+          --text-secondary: #545c62;
+          --text-dim: #868f95;
 
           /* 구조색: 아이콘·카드 제목·출처 배지 */
           --accent: #2f6b45;
@@ -734,7 +734,7 @@ def run_briefing():
           --rule-top: #3f7554;
           --rule-bottom: #1c3b28;
           --gloss: rgba(255,255,255,.9);
-          --cast: rgba(26,42,30,.24);
+          --cast: rgba(20,22,22,.22);
 
           --mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
           --sans: 'IBM Plex Sans KR', 'Segoe UI', 'Pretendard', 'Malgun Gothic', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
@@ -746,6 +746,10 @@ def run_briefing():
           margin: 0;
           font-family: var(--sans);
           background: var(--bg-page);
+          /* 페이지 전체 높이가 아니라 화면(뷰포트) 기준으로 그라데이션을 고정한다.
+             안 하면 항목이 많아 문서가 길어질수록 그라데이션이 늘어져서 거의 단색처럼 보인다. */
+          background-attachment: fixed;
+          background-size: 100% 100%;
           color: var(--text-primary);
           padding: 0 0 40px 0;
           min-height: 100vh;
