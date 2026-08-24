@@ -962,7 +962,10 @@ def run_briefing():
         }}
 
         .card-body {{
-          max-height: 460px;
+          /* 내용이 적은 카드는 짧고 많은 카드는 460px까지 차면서 열마다 카드 경계가
+             어긋나는(단차) 문제가 있었다. 높이를 고정해 모든 카드가 항상 같은 높이를
+             갖도록 하고, 내용이 넘치면 그 안에서만 스크롤되게 한다. */
+          height: 460px;
           overflow-y: auto;
           padding: 4px 14px 2px 14px;
         }}
