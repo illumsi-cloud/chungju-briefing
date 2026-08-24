@@ -706,32 +706,6 @@ def run_briefing():
           50% {{ opacity: 0.35; }}
         }}
 
-        .ticker-wrap {{
-          border-bottom: 1px solid var(--border);
-          background: var(--text-primary);
-          overflow: hidden;
-          white-space: nowrap;
-          padding: 8px 0;
-        }}
-
-        .ticker-track {{
-          display: inline-block;
-          white-space: nowrap;
-          font-family: var(--mono);
-          font-size: 0.8em;
-          color: #d8d8d5;
-          animation: ticker-scroll 90s linear infinite;
-          padding-left: 100%;
-        }}
-
-        .ticker-track .seg {{ margin-right: 40px; }}
-        .ticker-track .seg.warn {{ color: #ff8a6b; font-weight: 700; }}
-
-        @keyframes ticker-scroll {{
-          0% {{ transform: translateX(0); }}
-          100% {{ transform: translateX(-100%); }}
-        }}
-
         .stats-row {{
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -1299,10 +1273,6 @@ def run_briefing():
         </div>
       </div>
 
-      <div class="ticker-wrap">
-        <div class="ticker-track" id="ticker"></div>
-      </div>
-
       <div class="stats-row" id="statsRow"></div>
 
       <div class="filter-bar">
@@ -1544,20 +1514,6 @@ def run_briefing():
           return html;
         }}
 
-        function renderTicker() {{
-          const ticker = document.getElementById('ticker');
-          if (rawData.length === 0) {{ ticker.innerHTML = '<span class="seg">수집된 데이터가 없습니다</span>'; return; }}
-
-          const warnings = rawData.filter(hasWarning).slice(0, 15);
-          const source = (warnings.length > 0 ? warnings : rawData).slice(0, 20);
-          const segs = source.map(item => {{
-            const cls = hasWarning(item) ? 'seg warn' : 'seg';
-            const mark = hasWarning(item) ? '🔴 ' : '● ';
-            return `<span class="${{cls}}">${{mark}}${{escapeHtml(item['제목'])}}</span>`;
-          }}).join('');
-          ticker.innerHTML = segs + segs;
-        }}
-
         function renderStats() {{
           const statsRow = document.getElementById('statsRow');
           const total = rawData.length;
@@ -1688,7 +1644,6 @@ def run_briefing():
         }}
 
         function refreshAll() {{
-          renderTicker();
           renderStats();
           const input = document.getElementById('filterInput');
           renderDashboard(input ? input.value : '');
