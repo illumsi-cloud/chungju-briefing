@@ -1567,10 +1567,10 @@ def run_briefing():
         recomputeWarningRules();
 
         const columnDefs = [
-          {{ key: 'news', title: '① 뉴스 · 충주시 공지사항' }},
-          {{ key: 'notice', title: '② 고시 · 공고' }},
-          {{ key: 'school', title: '③ 학교 / 공동주택' }},
-          {{ key: 'etc', title: '④ 기타' }},
+          {{ key: 'news', title: '뉴스 · 충주시 공지사항' }},
+          {{ key: 'notice', title: '고시 · 공고' }},
+          {{ key: 'school', title: '학교 / 공동주택' }},
+          {{ key: 'etc', title: '기타' }},
         ];
 
         // 열 안에서 카드(카테고리 상자)가 뜨는 순서. 실제 데이터 등장 순서에 맡기면
