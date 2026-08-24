@@ -5,6 +5,7 @@ import ssl
 import re
 import os
 import http.cookiejar
+import difflib
 from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 import time
@@ -50,7 +51,7 @@ TOPIC_KEYWORDS = [
     "개발", "부동산", "아파트", "주택", "택지", "지구단위", "도시계획", "정비구역",
     "재개발", "재건축", "산업단지", "산단", "분양", "공동주택", "임대주택",
     "학교", "교육", "학생", "통학", "학군", "신설", "폐교", "증축", "개교",
-    "유치원", "어린이집", "학급", "교실"
+    "유치원", "어린이집", "학급", "교실", "이통반", "이·통·반"
 ]
 
 def matches_topic(text):
@@ -59,7 +60,13 @@ def matches_topic(text):
 # 충주시청 게시판(공지사항/고시공고 등) 자체 검색에 사용할 대표 키워드.
 # 게시판이 활발해서(하루 수건) "최신 페이지 1건"만 가져오면 몇 주 전 글이 이미
 # 밀려나 버리므로, 반드시 게시판 자체 검색으로 찾아야 한다.
-SEARCH_KEYWORDS = ["개발", "지구단위", "도시계획", "아파트", "주택", "택지", "학교", "교육", "학생", "산업단지"]
+SEARCH_KEYWORDS = ["개발", "지구단위", "도시계획", "아파트", "주택", "택지", "학교", "교육", "학생", "산업단지", "이통반", "이·통·반"]
+
+# 충주시청 '공지사항'과 '공고/고시/입찰' 게시판에서 관심 부서 글만 남기기 위한 부서 목록.
+NOTICE_DEPT_WHITELIST = {
+    "자치행정과", "투자유치과", "교통정책과", "도시계획과", "도로과",
+    "여성청소년과", "토지정보과", "평생학습과", "정원도시과", "균형개발과",
+}
 
 # 실행 회차 간 "신규 항목" 판정을 위한 이력 파일.
 # {"링크": ["처음 본 날짜", "그다음 본 날짜", ...]} 형태로, 링크가 목격된 날짜(중복 없이)만 누적한다.
@@ -170,6 +177,7 @@ def fetch_chungju_bbs(key, bbs_no, category, now_str):
                     "제목": clean_html(m.group('title')),
                     "요약": f"담당부서: {m.group('dept').strip()} · 작성일 {m.group('date').strip()}",
                     "작성일": m.group('date').strip(),
+                    "담당부서": m.group('dept').strip(),
                     "링크": detail_url
                 })
         except Exception as e:
@@ -217,6 +225,7 @@ def fetch_chungju_eminwon(key, ancmt_se_code, category, now_str):
                     "제목": clean_html(m.group('title')),
                     "요약": f"{m.group('pbanno').strip()} · 담당부서: {m.group('dept').strip()} · 등록일 {m.group('date').strip()}",
                     "작성일": m.group('date').strip(),
+                    "담당부서": m.group('dept').strip(),
                     "링크": detail_url
                 })
         except Exception as e:
@@ -267,6 +276,129 @@ def fetch_hug(keyword, category, now_str):
     except Exception as e:
         print(f" [오류] {category} 수집 실패: {e}")
     return results
+
+# 3열(카페 동향)에서 감시할 지역 카페 목록. 네이버 카페글 검색 API는 특정 카페로
+# 검색 범위를 제한할 수 없으므로, 부동산/개발 관련 키워드로 넓게 검색한 뒤
+# 응답의 cafeurl이 아래 목록에 해당하는 글만 걸러낸다.
+TARGET_CAFES = [
+    "https://cafe.naver.com/cjyeonsu",
+    "https://cafe.naver.com/westcj2030",
+    "https://cafe.naver.com/naver1st1",
+    "https://cafe.naver.com/chungjuground",
+    "https://cafe.naver.com/songmi1982",
+]
+
+CAFE_QUERIES = [
+    "충주 아파트", "충주 분양", "충주 부동산", "서충주", "충주 재개발",
+    "충주 재건축", "충주 택지", "충주 이주", "충주 신도시", "충주 전세",
+    "충주 매매", "충주 입주",
+]
+
+def fetch_target_cafes(cafe_urls, queries, category, now_str):
+    """네이버 카페글 검색 API로 지정된 지역 카페(cafe_urls)의 글만 필터링해 수집."""
+    results = []
+    seen_links = set()
+    for query in queries:
+        enc_query = urllib.parse.quote(query)
+        url = f"https://openapi.naver.com/v1/search/cafearticle.json?query={enc_query}&display=30&sort=date"
+        req = urllib.request.Request(url)
+        req.add_header("X-Naver-Client-Id", NAVER_CLIENT_ID)
+        req.add_header("X-Naver-Client-Secret", NAVER_CLIENT_SECRET)
+        try:
+            response = urllib.request.urlopen(req, context=ctx)
+            data = json.loads(response.read().decode('utf-8'))
+            for item in data.get('items', []):
+                if item.get('cafeurl', '') not in cafe_urls:
+                    continue
+                link = item.get('link', '')
+                if link in seen_links:
+                    continue
+                seen_links.add(link)
+                cafename = item.get('cafename', '').strip()
+                results.append({
+                    "수집일시": now_str,
+                    "분류": category,
+                    "출처": "카페",
+                    "제목": clean_html(item.get('title', '')),
+                    "요약": f"[{cafename}] {clean_html(item.get('description', ''))}",
+                    "작성일": "",
+                    "링크": link
+                })
+        except Exception as e:
+            print(f" [오류] {category} 수집 실패 ({query}): {e}")
+    return results
+
+# 대시보드 4열 레이아웃에서 각 분류(카테고리)가 어느 열에 속하는지 지정.
+# 매핑에 없는 분류는 자동으로 '기타' 열로 들어간다.
+CATEGORY_COLUMN = {
+    "🚨 [위기징후] 건설사·아파트 리스크": "news",
+    "🏫 [학교/교육] 학생배치 동향": "news",
+    "🏢 [일반동향] 충주 부동산": "news",
+    "🚨 [위기징후] HUG 보증사고·반환지연 민원": "news",
+    "🏙️ [도시계획고시] 토지이음 (충주)": "notice",
+    "📜 [자치법규] 입법예고 (충주시)": "notice",
+    "📜 [자치법규] 입법예고 (충청북도 도단위)": "notice",
+    "📢 [공지사항] 충주시청": "notice",
+    "📜 [입법예고] 충주시청": "notice",
+    "📋 [공고/고시/입찰] 충주시청": "notice",
+    "☕ [카페동향] 지정카페": "cafe",
+}
+
+def assign_columns(all_collected_data):
+    for item in all_collected_data:
+        item["컬럼"] = CATEGORY_COLUMN.get(item["분류"], "etc")
+
+# 여러 매체가 같은 전국 단위 보도자료(예: "삼성전자 히트펌프 생산" 기사가 충주를
+# 시험 지역 중 하나로 스치듯 언급)를 유사한 제목/문구로 동시 보도하는 경우가 있어,
+# 뉴스 계열 카테고리에 한해 유사 기사를 대표 1건(최신순)으로 접어 보여준다.
+NEWS_DEDUPE_CATEGORIES = {
+    "🚨 [위기징후] 건설사·아파트 리스크",
+    "🏫 [학교/교육] 학생배치 동향",
+    "🏢 [일반동향] 충주 부동산",
+}
+
+def _text_similarity(a, b):
+    return difflib.SequenceMatcher(None, a, b).ratio()
+
+def dedupe_similar_news(items, title_threshold=0.72, desc_threshold=0.5):
+    groups = []
+    for item in items:
+        placed_group = None
+        for group in groups:
+            rep = group[0]
+            if (_text_similarity(item["제목"], rep["제목"]) >= title_threshold or
+                    _text_similarity(item["요약"], rep["요약"]) >= desc_threshold):
+                placed_group = group
+                break
+        if placed_group is not None:
+            placed_group.append(item)
+        else:
+            groups.append([item])
+
+    result = []
+    for group in groups:
+        group.sort(key=lambda x: x.get("작성일") or "", reverse=True)
+        rep = dict(group[0])
+        rep["관련보도수"] = len(group)
+        if len(group) > 1:
+            rep["관련보도목록"] = [
+                {"제목": g["제목"], "링크": g["링크"], "작성일": g.get("작성일", "")}
+                for g in group[1:]
+            ]
+        result.append(rep)
+    return result
+
+def dedupe_similar_news_in_categories(all_collected_data):
+    by_category = {}
+    for item in all_collected_data:
+        by_category.setdefault(item["분류"], []).append(item)
+
+    result = []
+    for category, items in by_category.items():
+        if category in NEWS_DEDUPE_CATEGORIES:
+            items = dedupe_similar_news(items)
+        result.extend(items)
+    return result
 
 def fetch_eum(keyword, category, now_str):
     """토지이음(eum.go.kr) 도시계획 고시정보 검색.
@@ -382,6 +514,12 @@ def run_briefing():
 
         print(f" - {target['category']}: {found_count}건 발견")
 
+    # 1-0. 지정 지역 카페 5곳의 부동산/개발 관련 글 (3열 '카페 동향' 전용)
+    cafe_category = "☕ [카페동향] 지정카페"
+    cafe_items = fetch_target_cafes(TARGET_CAFES, CAFE_QUERIES, cafe_category, now_str)
+    all_collected_data.extend(cafe_items)
+    print(f" - {cafe_category}: {len(cafe_items)}건 발견")
+
     # 1-1. HUG(주택도시보증공사) 문의/민원 게시판 - 보증사고·반환지연 등 1차 민원 데이터
     hug_category = "🚨 [위기징후] HUG 보증사고·반환지연 민원"
     hug_items = fetch_hug("충주", hug_category, now_str)
@@ -404,19 +542,23 @@ def run_briefing():
         all_collected_data.extend(items)
         print(f" - {board['category']}: {len(items)}건 발견")
 
-    # 4. 충주시청 공지사항 / 유관기관 공지사항 / 입법예고 / 공고·고시·입찰
+    # 4. 충주시청 공지사항 / 입법예고 / 공고·고시·입찰
+    # '공지사항'과 '공고/고시/입찰'은 지정된 부서 목록에 해당하는 글만 남긴다.
     chungju_boards = [
-        {"fn": fetch_chungju_bbs, "args": (506, 5), "category": "📢 [공지사항] 충주시청"},
-        {"fn": fetch_chungju_bbs, "args": (507, 10), "category": "📢 [유관기관] 공지사항"},
+        {"fn": fetch_chungju_bbs, "args": (506, 5), "category": "📢 [공지사항] 충주시청", "dept_filter": True},
         {"fn": fetch_chungju_eminwon, "args": (509, "03"), "category": "📜 [입법예고] 충주시청"},
-        {"fn": fetch_chungju_eminwon, "args": (510, "01,02,04,05"), "category": "📋 [공고/고시/입찰] 충주시청"},
+        {"fn": fetch_chungju_eminwon, "args": (510, "01,02,04,05"), "category": "📋 [공고/고시/입찰] 충주시청", "dept_filter": True},
     ]
     for board in chungju_boards:
         items = board["fn"](*board["args"], board["category"], now_str)
+        if board.get("dept_filter"):
+            items = [i for i in items if i.get("담당부서") in NOTICE_DEPT_WHITELIST]
         all_collected_data.extend(items)
         print(f" - {board['category']}: {len(items)}건 발견")
 
     # 5. 지난 실행 대비 신규 항목 판정
+    all_collected_data = dedupe_similar_news_in_categories(all_collected_data)
+    assign_columns(all_collected_data)
     apply_history(all_collected_data, now_str)
     new_count = sum(1 for item in all_collected_data if item["신규"])
     print(f" - 🆕 신규 항목: {new_count}건")
@@ -430,27 +572,26 @@ def run_briefing():
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>충주 동향 인텔리전스 터미널</title>
+      <title>충주 동향 브리핑</title>
       <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8F%99%EF%B8%8F%3C/text%3E%3C/svg%3E">
       <meta name="description" content="충주시 개발·부동산·학교 동향을 자동 수집하는 대시보드 (GitHub Actions로 하루 3회 자동 갱신)">
       <style>
         :root {{
-          --bg: #060a13;
-          --bg-elevated: #0d1526;
-          --bg-elevated-2: #101b30;
-          --border: rgba(148, 178, 224, 0.14);
-          --border-strong: rgba(148, 178, 224, 0.28);
-          --text-primary: #e7edf8;
-          --text-secondary: #8a97ad;
-          --text-dim: #5b6478;
-          --accent-cyan: #22d3ee;
-          --accent-green: #34d399;
-          --accent-red: #fb4b6b;
-          --accent-amber: #fbbf24;
-          --accent-purple: #a78bfa;
-          --accent-blue: #60a5fa;
+          --bg-page: #f2f2f0;
+          --bg: #ffffff;
+          --bg-subtle: #fafaf9;
+          --border: #e2e2df;
+          --border-strong: #c9c9c5;
+          --text-primary: #1a1a1a;
+          --text-secondary: #595955;
+          --text-dim: #8c8c87;
+          --accent: #d9531e;
+          --accent-dark: #b84415;
+          --accent-green: #0a7a3d;
+          --accent-red: #c81e3a;
+          --accent-blue: #1a5fb4;
           --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-          --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Pretendard', 'Malgun Gothic', Roboto, sans-serif;
+          --sans: 'Segoe UI', 'Pretendard', 'Malgun Gothic', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
         }}
 
         * {{ box-sizing: border-box; }}
@@ -458,10 +599,7 @@ def run_briefing():
         body {{
           margin: 0;
           font-family: var(--sans);
-          background:
-            radial-gradient(circle at 15% 0%, rgba(34, 211, 238, 0.07), transparent 45%),
-            radial-gradient(circle at 85% 15%, rgba(167, 139, 250, 0.06), transparent 40%),
-            var(--bg);
+          background: var(--bg-page);
           color: var(--text-primary);
           padding: 0 0 40px 0;
           min-height: 100vh;
@@ -471,88 +609,86 @@ def run_briefing():
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 18px 28px;
-          border-bottom: 1px solid var(--border);
-          background: rgba(9, 14, 26, 0.85);
+          padding: 16px 28px;
+          border-bottom: 2px solid var(--text-primary);
+          background: var(--bg);
           position: sticky;
           top: 0;
           z-index: 10;
-          backdrop-filter: blur(10px);
         }}
 
-        .brand {{ display: flex; align-items: center; gap: 14px; }}
+        .brand {{ display: flex; align-items: center; gap: 12px; }}
 
         .brand-mark {{
-          width: 42px; height: 42px;
-          border-radius: 10px;
+          width: 38px; height: 38px;
+          border-radius: 4px;
           display: flex; align-items: center; justify-content: center;
-          font-family: var(--mono);
+          font-family: var(--sans);
           font-weight: 700;
           font-size: 0.95em;
-          background: linear-gradient(135deg, rgba(34,211,238,0.18), rgba(167,139,250,0.18));
-          border: 1px solid var(--border-strong);
-          color: var(--accent-cyan);
+          background: var(--accent);
+          color: #ffffff;
           letter-spacing: 0.5px;
         }}
 
         .brand h1 {{
           margin: 0;
-          font-size: 1.15em;
+          font-size: 1.2em;
           font-weight: 700;
           letter-spacing: -0.2px;
+          color: var(--text-primary);
         }}
 
         .brand .sub {{
           font-family: var(--mono);
-          font-size: 0.72em;
+          font-size: 0.7em;
           color: var(--text-dim);
           letter-spacing: 0.5px;
           margin-top: 2px;
         }}
 
         .live-indicator {{
-          display: flex; align-items: center; gap: 8px;
+          display: flex; align-items: center; gap: 7px;
           font-family: var(--mono);
-          font-size: 0.78em;
+          font-size: 0.76em;
+          font-weight: 700;
           color: var(--accent-green);
-          border: 1px solid rgba(52, 211, 153, 0.3);
-          background: rgba(52, 211, 153, 0.08);
-          padding: 6px 12px;
-          border-radius: 999px;
+          border: 1px solid var(--accent-green);
+          padding: 5px 11px;
+          border-radius: 3px;
         }}
 
         .live-indicator .dot {{
-          width: 7px; height: 7px; border-radius: 50%;
+          width: 6px; height: 6px; border-radius: 50%;
           background: var(--accent-green);
-          box-shadow: 0 0 8px var(--accent-green);
-          animation: pulse 1.6s ease-in-out infinite;
+          animation: pulse 2s ease-in-out infinite;
         }}
 
         @keyframes pulse {{
-          0%, 100% {{ opacity: 1; transform: scale(1); }}
-          50% {{ opacity: 0.4; transform: scale(0.8); }}
+          0%, 100% {{ opacity: 1; }}
+          50% {{ opacity: 0.35; }}
         }}
 
         .ticker-wrap {{
           border-bottom: 1px solid var(--border);
-          background: var(--bg-elevated);
+          background: var(--text-primary);
           overflow: hidden;
           white-space: nowrap;
-          padding: 10px 0;
+          padding: 8px 0;
         }}
 
         .ticker-track {{
           display: inline-block;
           white-space: nowrap;
           font-family: var(--mono);
-          font-size: 0.82em;
-          color: var(--text-secondary);
+          font-size: 0.8em;
+          color: #d8d8d5;
           animation: ticker-scroll 90s linear infinite;
           padding-left: 100%;
         }}
 
         .ticker-track .seg {{ margin-right: 40px; }}
-        .ticker-track .seg.warn {{ color: var(--accent-red); font-weight: 600; }}
+        .ticker-track .seg.warn {{ color: #ff8a6b; font-weight: 700; }}
 
         @keyframes ticker-scroll {{
           0% {{ transform: translateX(0); }}
@@ -561,96 +697,94 @@ def run_briefing():
 
         .stats-row {{
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-          gap: 14px;
-          padding: 22px 28px 0 28px;
+          grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+          gap: 1px;
+          background: var(--border);
+          border: 1px solid var(--border);
+          margin: 22px 28px 0 28px;
         }}
 
         .stat-tile {{
-          background: var(--bg-elevated);
-          border: 1px solid var(--border);
-          border-radius: 12px;
-          padding: 16px 18px;
+          background: var(--bg);
+          padding: 14px 18px;
         }}
 
         .stat-tile .label {{
-          font-size: 0.72em;
+          font-size: 0.7em;
           color: var(--text-dim);
-          letter-spacing: 0.5px;
+          letter-spacing: 0.4px;
           text-transform: uppercase;
           margin-bottom: 8px;
         }}
 
         .stat-tile .value {{
-          font-family: var(--mono);
-          font-size: 1.6em;
+          font-family: var(--sans);
+          font-size: 1.5em;
           font-weight: 700;
           color: var(--text-primary);
         }}
 
-        .stat-tile.risk .value {{ color: var(--accent-red); text-shadow: 0 0 16px rgba(251, 75, 107, 0.35); }}
-        .stat-tile.new .value {{ color: var(--accent-green); text-shadow: 0 0 16px rgba(52, 211, 153, 0.35); }}
-        .stat-tile.clock .value {{ color: var(--accent-cyan); font-size: 1.4em; }}
+        .stat-tile.risk .value {{ color: var(--accent-red); }}
+        .stat-tile.new .value {{ color: var(--accent-green); }}
+        .stat-tile.clock .value {{ font-family: var(--mono); color: var(--accent); font-size: 1.3em; }}
 
-        .grid {{
+        .columns {{
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+          grid-template-columns: repeat(4, 1fr);
           gap: 18px;
           padding: 22px 28px;
           align-items: start;
         }}
 
+        .column-head {{
+          font-size: 0.98em;
+          font-weight: 700;
+          color: var(--text-primary);
+          padding-bottom: 8px;
+          margin-bottom: 14px;
+          border-bottom: 3px solid var(--accent);
+        }}
+
+        .column-body {{
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        }}
+
         .card {{
-          background: var(--bg-elevated);
+          background: var(--bg);
           border: 1px solid var(--border);
-          border-radius: 14px;
-          overflow: hidden;
-          transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-        }}
-
-        .card:hover {{
-          border-color: var(--card-accent, var(--accent-cyan));
-          box-shadow: 0 0 0 1px var(--card-accent, var(--accent-cyan)) inset, 0 12px 32px -16px var(--card-accent, var(--accent-cyan));
-          transform: translateY(-2px);
-        }}
-
-        .card::before {{
-          content: '';
-          display: block;
-          height: 3px;
-          background: var(--card-accent, var(--accent-cyan));
-          box-shadow: 0 0 12px var(--card-accent, var(--accent-cyan));
         }}
 
         .card-header {{
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 14px 18px;
+          padding: 11px 14px;
           border-bottom: 1px solid var(--border);
+          background: var(--bg-subtle);
         }}
 
         .card-header h2 {{
           margin: 0;
-          font-size: 0.98em;
+          font-size: 0.86em;
           font-weight: 700;
           color: var(--text-primary);
         }}
 
         .card-count {{
           font-family: var(--mono);
-          font-size: 0.75em;
-          color: var(--card-accent, var(--accent-cyan));
-          background: color-mix(in srgb, var(--card-accent, var(--accent-cyan)) 14%, transparent);
-          border: 1px solid var(--card-accent, var(--accent-cyan));
-          border-radius: 999px;
-          padding: 2px 9px;
+          font-size: 0.74em;
+          color: var(--text-secondary);
+          border: 1px solid var(--border-strong);
+          border-radius: 3px;
+          padding: 1px 7px;
         }}
 
         .card-body {{
           max-height: 460px;
           overflow-y: auto;
-          padding: 6px 18px 4px 18px;
+          padding: 4px 14px 2px 14px;
         }}
 
         .card-body::-webkit-scrollbar {{ width: 7px; }}
@@ -659,10 +793,10 @@ def run_briefing():
           background: var(--border-strong);
           border-radius: 10px;
         }}
-        .card-body::-webkit-scrollbar-thumb:hover {{ background: var(--card-accent, var(--accent-cyan)); }}
+        .card-body::-webkit-scrollbar-thumb:hover {{ background: var(--accent); }}
 
         .item {{
-          padding: 12px 0;
+          padding: 11px 0;
           border-bottom: 1px solid var(--border);
         }}
 
@@ -677,41 +811,224 @@ def run_briefing():
 
         .badge {{
           display: inline-block;
-          padding: 2px 8px;
-          font-size: 0.68em;
+          padding: 1px 7px;
+          font-size: 0.66em;
           font-family: var(--mono);
-          border-radius: 5px;
-          font-weight: 600;
-          letter-spacing: 0.3px;
+          border-radius: 3px;
+          font-weight: 700;
+          letter-spacing: 0.2px;
           border: 1px solid transparent;
         }}
 
-        .badge-news {{ background: rgba(96, 165, 250, 0.12); color: var(--accent-blue); border-color: rgba(96, 165, 250, 0.3); }}
-        .badge-cafe {{ background: rgba(251, 191, 36, 0.12); color: var(--accent-amber); border-color: rgba(251, 191, 36, 0.3); }}
+        .badge-news {{ background: #eaf1fb; color: var(--accent-blue); border-color: #c3d7f0; }}
+        .badge-cafe {{ background: #e8f6ee; color: var(--accent-green); border-color: #b9e3ca; }}
+        .badge-official {{ background: #fdf1e8; color: var(--accent); border-color: #f2cdb0; }}
         .badge-warning {{
-          background: rgba(251, 75, 107, 0.14);
+          background: #fbe9ec;
           color: var(--accent-red);
-          border-color: rgba(251, 75, 107, 0.4);
-          text-shadow: 0 0 8px rgba(251, 75, 107, 0.4);
+          border-color: #f0bcc4;
         }}
 
         .badge-new {{
-          background: rgba(52, 211, 153, 0.14);
+          background: #e8f6ee;
           color: var(--accent-green);
-          border-color: rgba(52, 211, 153, 0.45);
-          text-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
-          animation: new-pulse 1.8s ease-in-out infinite;
-        }}
-
-        @keyframes new-pulse {{
-          0%, 100% {{ box-shadow: 0 0 0 rgba(52, 211, 153, 0); }}
-          50% {{ box-shadow: 0 0 10px rgba(52, 211, 153, 0.55); }}
+          border-color: #b9e3ca;
         }}
 
         .badge-streak {{
-          background: rgba(167, 139, 250, 0.12);
-          color: var(--accent-purple);
-          border-color: rgba(167, 139, 250, 0.35);
+          background: var(--bg-subtle);
+          color: var(--text-secondary);
+          border-color: var(--border-strong);
+        }}
+
+        .badge-dup {{
+          background: var(--bg-subtle);
+          color: var(--text-dim);
+          border-color: var(--border);
+          cursor: pointer;
+          user-select: none;
+        }}
+        .badge-dup:hover {{ border-color: var(--text-secondary); color: var(--text-secondary); }}
+
+        .dup-list {{
+          margin-top: 8px;
+          padding-left: 10px;
+          border-left: 2px solid var(--border);
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }}
+
+        .dup-list-item {{
+          font-size: 0.8em;
+          color: var(--text-secondary);
+          text-decoration: none;
+          display: flex;
+          justify-content: space-between;
+          gap: 8px;
+        }}
+
+        .dup-list-item:hover {{ color: var(--accent); text-decoration: underline; }}
+
+        .dup-list-date {{
+          font-family: var(--mono);
+          font-size: 0.85em;
+          color: var(--text-dim);
+          white-space: nowrap;
+        }}
+
+        .settings-btn {{
+          font-family: var(--sans);
+          font-size: 0.78em;
+          font-weight: 700;
+          color: var(--text-secondary);
+          background: var(--bg);
+          border: 1px solid var(--border-strong);
+          border-radius: 3px;
+          padding: 6px 12px;
+          cursor: pointer;
+        }}
+
+        .settings-btn:hover {{ color: var(--accent); border-color: var(--accent); }}
+
+        .topbar-right {{
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }}
+
+        .modal-overlay {{
+          display: none;
+          position: fixed;
+          inset: 0;
+          background: rgba(20, 18, 14, 0.5);
+          z-index: 100;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+        }}
+
+        .modal-overlay.open {{ display: flex; }}
+
+        .modal-panel {{
+          background: var(--bg);
+          border-radius: 6px;
+          max-width: 560px;
+          width: 100%;
+          max-height: 80vh;
+          display: flex;
+          flex-direction: column;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }}
+
+        .modal-header {{
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 16px 20px;
+          border-bottom: 1px solid var(--border);
+        }}
+
+        .modal-header h3 {{ margin: 0; font-size: 1em; }}
+
+        .modal-close-btn {{
+          background: none;
+          border: none;
+          cursor: pointer;
+          font-size: 1.1em;
+          color: var(--text-dim);
+          line-height: 1;
+        }}
+
+        .modal-close-btn:hover {{ color: var(--text-primary); }}
+
+        .modal-desc {{
+          padding: 12px 20px 0 20px;
+          font-size: 0.82em;
+          color: var(--text-secondary);
+          line-height: 1.5;
+          margin: 0;
+        }}
+
+        .rule-list {{
+          overflow-y: auto;
+          padding: 12px 20px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }}
+
+        .rule-row {{
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 10px;
+          border: 1px solid var(--border);
+          border-radius: 4px;
+          font-size: 0.85em;
+        }}
+
+        .rule-row.rule-off {{ opacity: 0.5; }}
+
+        .rule-toggle {{
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex: 1;
+          cursor: pointer;
+        }}
+
+        .rule-text {{ flex: 1; }}
+
+        .rule-tag {{
+          font-family: var(--mono);
+          font-size: 0.7em;
+          color: var(--text-dim);
+          border: 1px solid var(--border-strong);
+          border-radius: 3px;
+          padding: 1px 6px;
+          white-space: nowrap;
+        }}
+
+        .rule-tag-custom {{ color: var(--accent-green); border-color: #b9e3ca; }}
+
+        .rule-remove-btn {{
+          font-size: 0.78em;
+          color: var(--accent-red);
+          background: none;
+          border: 1px solid transparent;
+          cursor: pointer;
+          padding: 3px 8px;
+          border-radius: 3px;
+        }}
+
+        .rule-remove-btn:hover {{ border-color: var(--accent-red); }}
+
+        .rule-add-row {{
+          display: flex;
+          gap: 8px;
+          padding: 12px 20px;
+          border-top: 1px solid var(--border);
+        }}
+
+        .rule-add-row input {{
+          flex: 1;
+          border: 1px solid var(--border-strong);
+          border-radius: 4px;
+          padding: 8px 10px;
+          font-size: 0.85em;
+          outline: none;
+          color: var(--text-primary);
+          background: var(--bg);
+          font-family: var(--sans);
+        }}
+
+        .rule-add-row input:focus {{ border-color: var(--accent); }}
+
+        .modal-footer-note {{
+          padding: 0 20px 14px 20px;
+          font-size: 0.72em;
+          color: var(--text-dim);
         }}
 
         .item-title {{
@@ -723,13 +1040,13 @@ def run_briefing():
           -webkit-box-orient: vertical;
           overflow: hidden;
           line-height: 1.45;
-          font-size: 0.93em;
+          font-size: 0.92em;
         }}
 
-        .item-title:hover {{ color: var(--accent-cyan); }}
+        .item-title:hover {{ color: var(--accent); text-decoration: underline; }}
 
         .item-desc {{
-          font-size: 0.82em;
+          font-size: 0.81em;
           color: var(--text-secondary);
           line-height: 1.55;
           margin-top: 6px;
@@ -742,19 +1059,17 @@ def run_briefing():
         .highlight-red {{
           color: var(--accent-red);
           font-weight: 700;
-          background: rgba(251, 75, 107, 0.14);
+          background: #fbe9ec;
           padding: 0 3px;
-          border-radius: 3px;
-          text-shadow: 0 0 6px rgba(251, 75, 107, 0.35);
+          border-radius: 2px;
         }}
 
         .highlight-search {{
-          color: #0b1220;
+          color: #1a1a1a;
           font-weight: 700;
-          background: var(--accent-cyan);
+          background: #ffe3a3;
           padding: 0 3px;
-          border-radius: 3px;
-          box-shadow: 0 0 10px rgba(34, 211, 238, 0.55);
+          border-radius: 2px;
         }}
 
         .filter-bar {{
@@ -769,22 +1084,22 @@ def run_briefing():
           display: flex;
           align-items: center;
           gap: 8px;
-          background: var(--bg-elevated);
-          border: 1px solid var(--border);
-          border-radius: 10px;
+          background: var(--bg);
+          border: 1px solid var(--border-strong);
+          border-radius: 4px;
           padding: 8px 12px;
           flex: 1;
           min-width: 240px;
         }}
 
         .filter-input-wrap:focus-within {{
-          border-color: var(--accent-cyan);
-          box-shadow: 0 0 0 1px var(--accent-cyan);
+          border-color: var(--accent);
+          box-shadow: 0 0 0 1px var(--accent);
         }}
 
         .filter-prompt {{
           font-family: var(--mono);
-          color: var(--accent-cyan);
+          color: var(--accent);
           font-size: 0.9em;
         }}
 
@@ -794,19 +1109,19 @@ def run_briefing():
           border: none;
           outline: none;
           color: var(--text-primary);
-          font-family: var(--mono);
+          font-family: var(--sans);
           font-size: 0.9em;
         }}
 
         #filterInput::placeholder {{ color: var(--text-dim); }}
 
         .filter-btn {{
-          font-family: var(--mono);
-          font-size: 0.8em;
+          font-family: var(--sans);
+          font-size: 0.82em;
           font-weight: 700;
-          letter-spacing: 0.3px;
-          border-radius: 8px;
-          padding: 10px 16px;
+          letter-spacing: 0.2px;
+          border-radius: 4px;
+          padding: 9px 16px;
           cursor: pointer;
           border: 1px solid transparent;
           transition: filter 0.15s ease, transform 0.1s ease;
@@ -815,12 +1130,12 @@ def run_briefing():
         .filter-btn:active {{ transform: scale(0.97); }}
 
         .filter-btn-search {{
-          background: var(--accent-cyan);
-          color: #05131a;
-          border-color: var(--accent-cyan);
+          background: var(--accent);
+          color: #ffffff;
+          border-color: var(--accent);
         }}
 
-        .filter-btn-search:hover {{ filter: brightness(1.1); }}
+        .filter-btn-search:hover {{ background: var(--accent-dark); }}
 
         .filter-btn-reset {{
           background: transparent;
@@ -834,7 +1149,7 @@ def run_briefing():
           padding: 10px 28px 0 28px;
           font-family: var(--mono);
           font-size: 0.78em;
-          color: var(--accent-cyan);
+          color: var(--accent-dark);
           display: none;
         }}
 
@@ -859,11 +1174,11 @@ def run_briefing():
           align-items: center;
           gap: 8px;
           font-family: var(--mono);
-          font-size: 0.7em;
-          letter-spacing: 0.6px;
-          color: var(--card-accent, var(--accent-cyan));
+          font-size: 0.68em;
+          letter-spacing: 0.5px;
+          color: var(--accent-dark);
           text-transform: uppercase;
-          padding: 14px 0 6px 0;
+          padding: 13px 0 6px 0;
           border-top: 1px solid var(--border);
           margin-top: 4px;
         }}
@@ -881,19 +1196,20 @@ def run_briefing():
         }}
 
         .empty-state {{
-          padding: 60px 28px;
+          padding: 40px 14px;
           text-align: center;
           color: var(--text-dim);
           font-family: var(--mono);
+          font-size: 0.85em;
         }}
 
         footer {{
           text-align: center;
-          padding: 28px 20px 24px 20px;
+          padding: 26px 20px 22px 20px;
           color: var(--text-dim);
-          font-family: var(--mono);
-          font-size: 0.72em;
-          letter-spacing: 0.4px;
+          font-family: var(--sans);
+          font-size: 0.75em;
+          letter-spacing: 0.2px;
           border-top: 1px solid var(--border);
           margin-top: 12px;
         }}
@@ -903,11 +1219,12 @@ def run_briefing():
           align-items: center;
           gap: 6px;
           color: var(--accent-green);
-          border: 1px solid rgba(52, 211, 153, 0.3);
-          background: rgba(52, 211, 153, 0.08);
+          border: 1px solid #b9e3ca;
+          background: #e8f6ee;
           padding: 5px 12px;
-          border-radius: 999px;
+          border-radius: 3px;
           margin-bottom: 12px;
+          font-weight: 700;
         }}
 
         footer .sources {{
@@ -917,11 +1234,16 @@ def run_briefing():
           margin: 0 auto;
         }}
 
+        @media (max-width: 1100px) {{
+          .columns {{ grid-template-columns: repeat(2, 1fr); }}
+        }}
+
         @media (max-width: 640px) {{
-          .stats-row, .grid, .filter-bar, .filter-status {{ padding-left: 14px; padding-right: 14px; }}
+          .stats-row, .columns, .filter-bar, .filter-status {{ padding-left: 14px; padding-right: 14px; margin-left: 14px; margin-right: 14px; }}
           .topbar {{ padding: 14px; flex-wrap: wrap; gap: 10px; }}
-          .brand h1 {{ font-size: 1em; }}
-          .grid {{ grid-template-columns: 1fr; }}
+          .brand h1 {{ font-size: 1.05em; }}
+          .columns {{ grid-template-columns: 1fr; padding-left: 14px; padding-right: 14px; margin: 0; }}
+          .stats-row {{ margin-left: 14px; margin-right: 14px; }}
         }}
       </style>
     </head>
@@ -930,11 +1252,14 @@ def run_briefing():
         <div class="brand">
           <div class="brand-mark">CJ</div>
           <div>
-            <h1>충주 동향 인텔리전스</h1>
-            <div class="sub">CHUNGJU REGIONAL INTELLIGENCE TERMINAL</div>
+            <h1>충주 동향 브리핑</h1>
+            <div class="sub">CHUNGJU REGIONAL BRIEFING</div>
           </div>
         </div>
-        <div class="live-indicator"><span class="dot"></span>LIVE</div>
+        <div class="topbar-right">
+          <button type="button" class="settings-btn" id="warningSettingsBtn">⚙ 주의어 설정</button>
+          <div class="live-indicator"><span class="dot"></span>자동 갱신 중</div>
+        </div>
       </div>
 
       <div class="ticker-wrap">
@@ -954,14 +1279,34 @@ def run_briefing():
       <div class="filter-status" id="filterStatus"></div>
 
       <div id="dashboardWrap">
-        <div class="grid" id="dashboard"></div>
+        <div class="columns" id="dashboard"></div>
+      </div>
+
+      <div class="modal-overlay" id="warningSettingsOverlay">
+        <div class="modal-panel">
+          <div class="modal-header">
+            <h3>🚨 주의 표시 키워드 관리</h3>
+            <button type="button" class="modal-close-btn" id="warningSettingsCloseBtn">✕</button>
+          </div>
+          <p class="modal-desc">
+            아래 규칙 중 하나라도 만족하면(같은 규칙 안 단어는 모두 포함되어야 함, 규칙끼리는 OR) 제목/요약에 🚨 주의 배지가 표시됩니다.
+            변경 사항은 이 브라우저에만 저장되며, 다음 자동 갱신에도 유지됩니다.
+          </p>
+          <div class="rule-list" id="warningRuleList"></div>
+          <div class="rule-add-row">
+            <input type="text" id="newRuleInput" placeholder="새 키워드 추가 (AND 조건은 + 로 구분, 예: 한화포레나+충주호암)">
+            <button type="button" class="filter-btn filter-btn-search" id="addRuleBtn">추가</button>
+          </div>
+          <div class="modal-footer-note">기본 규칙은 삭제 대신 체크 해제로 끌 수 있고, 언제든 다시 켤 수 있습니다.</div>
+        </div>
       </div>
 
       <footer>
         <div class="auto-badge">⚙️ GitHub Actions로 매일 10:00 · 14:00 · 17:40 자동 갱신</div>
         <div class="sources">
           충주시 개발·부동산·학교 관련 공공데이터를 자동 수집하는 대시보드입니다.<br>
-          출처: 네이버 뉴스·카페 · 충주시청(공지사항·지구단위계획·고시공고) · 자치법규정보시스템(elis.go.kr) ·
+          출처: 네이버 뉴스·카페(cjyeonsu · westcj2030 · naver1st1 · chungjuground · songmi1982) ·
+          충주시청(공지사항·지구단위계획·고시공고) · 자치법규정보시스템(elis.go.kr) ·
           주택도시보증공사(HUG) · 토지이음(eum.go.kr)<br>
           담당자 확인용 참고 자료이며, 법적 효력이 있는 공식 공고는 각 기관 원문을 반드시 확인하세요.
         </div>
@@ -969,24 +1314,81 @@ def run_briefing():
 
       <script>
         const rawData = {json_data_str};
-        const warningKeywords = ['반대', '민원', '지연', '갈등', '우려', '취소', '투기', '하락', '논란', '피해'];
-        const palette = ['#fb4b6b', '#fbbf24', '#60a5fa', '#a78bfa', '#22d3ee', '#34d399', '#f472b6', '#38bdf8', '#facc15', '#c084fc', '#4ade80'];
-        const categoryColor = {{}};
 
-        function colorFor(category) {{
-          if (!(category in categoryColor)) {{
-            categoryColor[category] = palette[Object.keys(categoryColor).length % palette.length];
+        // 🚨 주의 배지 기본 규칙 (규칙 내 항목은 모두 AND, 규칙 간에는 OR).
+        // 사용자가 '주의어 설정'에서 켜고 끄거나 새 규칙을 추가할 수 있으며, 그 변경은
+        // localStorage에 저장되어 이 브라우저에서 계속 유지된다.
+        const defaultWarningRules = [
+          ['삼일건설'],
+          ['삼일파라뷰'],
+          ['한화포레나 충주호암'],
+          ['서충주', '아파트'],
+          ['통학구역'],
+          ['학구'],
+          ['건설사 회생'],
+          ['미분양', '충주'],
+          ['도시계획', '조례'],
+          ['이통반'],
+          ['이·통·반'],
+          ['학교', '조례'],
+          ['충주', '유치원'],
+          ['충주', '초등학교'],
+          ['충주', '중학교'],
+          ['충주', '고등학교'],
+        ];
+        // 하이라이트 시에는 '충주'/'아파트'/'학교'/'조례'처럼 너무 흔한 단어는 제외한다.
+        const HIGHLIGHT_STOPWORDS = new Set(['충주', '아파트', '학교', '조례']);
+        const WARNING_RULE_STORAGE_KEY = 'cj_briefing_warning_rules_v1';
+
+        function ruleKey(rule) {{ return rule.join('+'); }}
+
+        function loadWarningRuleState() {{
+          try {{
+            const raw = JSON.parse(localStorage.getItem(WARNING_RULE_STORAGE_KEY) || '{{}}');
+            return {{
+              disabled: Array.isArray(raw.disabled) ? raw.disabled : [],
+              custom: Array.isArray(raw.custom) ? raw.custom : [],
+            }};
+          }} catch (e) {{
+            return {{ disabled: [], custom: [] }};
           }}
-          return categoryColor[category];
         }}
 
+        function saveWarningRuleState(state) {{
+          localStorage.setItem(WARNING_RULE_STORAGE_KEY, JSON.stringify(state));
+        }}
+
+        let warningRuleState = loadWarningRuleState();
+        let warningRules = [];
+        let warningHighlightTerms = [];
+
+        function recomputeWarningRules() {{
+          const disabledSet = new Set(warningRuleState.disabled);
+          const active = defaultWarningRules.filter(rule => !disabledSet.has(ruleKey(rule)));
+          warningRules = [...active, ...warningRuleState.custom];
+          const terms = new Set();
+          warningRules.forEach(rule => rule.forEach(term => {{
+            if (!HIGHLIGHT_STOPWORDS.has(term)) terms.add(term);
+          }}));
+          warningHighlightTerms = [...terms];
+        }}
+        recomputeWarningRules();
+
+        const columnDefs = [
+          {{ key: 'news', title: '① 뉴스 · HUG 게시판' }},
+          {{ key: 'notice', title: '② 공시 · 충주시청 알림' }},
+          {{ key: 'cafe', title: '③ 카페 동향' }},
+          {{ key: 'etc', title: '④ 기타' }},
+        ];
+
         function hasWarning(item) {{
-          return warningKeywords.some(kw => item['제목'].includes(kw) || item['요약'].includes(kw));
+          const text = item['제목'] + ' ' + item['요약'];
+          return warningRules.some(rule => rule.every(kw => text.includes(kw)));
         }}
 
         function highlightWarning(text) {{
           let resultText = text;
-          warningKeywords.forEach(keyword => {{
+          warningHighlightTerms.forEach(keyword => {{
             const regex = new RegExp(keyword, 'g');
             resultText = resultText.replace(regex, `<span class="highlight-red">${{keyword}}</span>`);
           }});
@@ -1029,12 +1431,19 @@ def run_briefing():
           return '1년 이상';
         }}
 
+        let dupIdCounter = 0;
+
         function renderItem(item, filterTerm) {{
-          const badgeClass = item['출처'] === '뉴스' ? 'badge-news' : 'badge-cafe';
+          const badgeClass = item['출처'] === '뉴스' ? 'badge-news' : (item['출처'] === '카페' ? 'badge-cafe' : 'badge-official');
           const warningBadge = hasWarning(item) ? `<span class="badge badge-warning">🚨 주의</span>` : '';
           const newBadge = item['신규'] ? `<span class="badge badge-new">🆕 NEW</span>` : '';
           const streakBadge = (!item['신규'] && item['발견일수'] >= 2)
             ? `<span class="badge badge-streak">🔁 ${{item['발견일수']}}일째</span>`
+            : '';
+          const dupList = item['관련보도목록'] || [];
+          const dupId = `dup-${{dupIdCounter++}}`;
+          const dupBadge = dupList.length > 0
+            ? `<span class="badge badge-dup" data-target="${{dupId}}" data-count="${{item['관련보도수']}}">유사보도 ${{item['관련보도수']}}건 보기</span>`
             : '';
           let displayTitle = highlightWarning(escapeHtml(item['제목']));
           let displayDesc = highlightWarning(escapeHtml(item['요약']));
@@ -1043,16 +1452,36 @@ def run_briefing():
             displayDesc = highlightSearch(displayDesc, filterTerm);
           }}
           const dateTag = item['작성일'] ? `<span class="item-date-tag">${{item['작성일']}}</span>` : '';
+          const dupListHtml = dupList.length > 0
+            ? `<div class="dup-list" id="${{dupId}}" style="display:none">${{dupList.map(d => `
+                <a href="${{d['링크']}}" target="_blank" class="dup-list-item">
+                  <span>${{escapeHtml(d['제목'])}}</span>
+                  ${{d['작성일'] ? `<span class="dup-list-date">${{d['작성일']}}</span>` : ''}}
+                </a>
+              `).join('')}}</div>`
+            : '';
 
           return `
             <div class="item">
               <div class="item-top">
-                <span class="badge ${{badgeClass}}">${{item['출처']}}</span>${{warningBadge}}${{newBadge}}${{streakBadge}}${{dateTag}}
+                <span class="badge ${{badgeClass}}">${{item['출처']}}</span>${{warningBadge}}${{newBadge}}${{streakBadge}}${{dupBadge}}${{dateTag}}
               </div>
               <a href="${{item['링크']}}" target="_blank" class="item-title">${{displayTitle}}</a>
               <div class="item-desc">${{displayDesc}}</div>
+              ${{dupListHtml}}
             </div>
           `;
+        }}
+
+        function toggleDupList(badgeEl) {{
+          const id = badgeEl.dataset.target;
+          const list = document.getElementById(id);
+          if (!list) return;
+          const show = list.style.display === 'none';
+          list.style.display = show ? 'flex' : 'none';
+          badgeEl.textContent = show
+            ? `유사보도 ${{badgeEl.dataset.count}}건 접기`
+            : `유사보도 ${{badgeEl.dataset.count}}건 보기`;
         }}
 
         function renderCardBody(category, items, filterTerm) {{
@@ -1129,7 +1558,7 @@ def run_briefing():
             return;
           }}
 
-          const sourceData = term
+          const filteredData = term
             ? rawData.filter(item => {{
                 const t = item['제목'].toLowerCase();
                 const d = item['요약'].toLowerCase();
@@ -1137,6 +1566,16 @@ def run_briefing():
                 return t.includes(q) || d.includes(q);
               }})
             : rawData;
+
+          // 작성일(실제 게시일) 기준 최신순 정렬. 날짜가 없는 항목(카페글 등)은 맨 뒤로.
+          const sourceData = [...filteredData].sort((a, b) => {{
+            const da = a['작성일'] || '';
+            const db = b['작성일'] || '';
+            if (!da && !db) return 0;
+            if (!da) return 1;
+            if (!db) return -1;
+            return db.localeCompare(da);
+          }});
 
           if (term) {{
             status.classList.add('active');
@@ -1153,31 +1592,51 @@ def run_briefing():
             return;
           }}
 
-          const groupedData = sourceData.reduce((acc, item) => {{
-            if (!acc[item['분류']]) acc[item['분류']] = [];
-            acc[item['분류']].push(item);
-            return acc;
-          }}, {{}});
+          const byColumn = {{}};
+          sourceData.forEach(item => {{
+            const col = item['컬럼'] || 'etc';
+            if (!byColumn[col]) byColumn[col] = [];
+            byColumn[col].push(item);
+          }});
 
           dashboard.innerHTML = '';
 
-          for (const [category, items] of Object.entries(groupedData)) {{
-            const accent = colorFor(category);
-            const card = document.createElement('div');
-            card.className = 'card';
-            card.style.setProperty('--card-accent', accent);
+          columnDefs.forEach(colDef => {{
+            const colItems = byColumn[colDef.key] || [];
 
-            const bodyHtml = renderCardBody(category, items, term);
+            const groupedData = colItems.reduce((acc, item) => {{
+              if (!acc[item['분류']]) acc[item['분류']] = [];
+              acc[item['분류']].push(item);
+              return acc;
+            }}, {{}});
 
-            card.innerHTML = `
-              <div class="card-header">
-                <h2>${{category}}</h2>
-                <span class="card-count">${{items.length}}</span>
-              </div>
-              <div class="card-body">${{bodyHtml}}</div>
+            const section = document.createElement('section');
+            section.className = 'column';
+
+            let bodyHtml = '';
+            if (colItems.length === 0) {{
+              bodyHtml = '<div class="empty-state">// 해당 없음 //</div>';
+            }} else {{
+              for (const [category, items] of Object.entries(groupedData)) {{
+                const cardBody = renderCardBody(category, items, term);
+                bodyHtml += `
+                  <div class="card">
+                    <div class="card-header">
+                      <h2>${{category}}</h2>
+                      <span class="card-count">${{items.length}}</span>
+                    </div>
+                    <div class="card-body">${{cardBody}}</div>
+                  </div>
+                `;
+              }}
+            }}
+
+            section.innerHTML = `
+              <div class="column-head">${{colDef.title}}</div>
+              <div class="column-body">${{bodyHtml}}</div>
             `;
-            dashboard.appendChild(card);
-          }}
+            dashboard.appendChild(section);
+          }});
         }}
 
         function applyFilter() {{
@@ -1191,18 +1650,115 @@ def run_briefing():
           renderDashboard('');
         }}
 
-        function renderBriefing() {{
+        function refreshAll() {{
           renderTicker();
           renderStats();
+          const input = document.getElementById('filterInput');
+          renderDashboard(input ? input.value : '');
+        }}
+
+        // --- 주의어 설정 모달 ---
+
+        function openWarningSettings() {{
+          renderWarningSettingsModal();
+          document.getElementById('warningSettingsOverlay').classList.add('open');
+        }}
+
+        function closeWarningSettings() {{
+          document.getElementById('warningSettingsOverlay').classList.remove('open');
+        }}
+
+        function renderWarningSettingsModal() {{
+          const disabledSet = new Set(warningRuleState.disabled);
+          let html = '';
+          defaultWarningRules.forEach(rule => {{
+            const key = ruleKey(rule);
+            const isOff = disabledSet.has(key);
+            html += `
+              <div class="rule-row ${{isOff ? 'rule-off' : ''}}">
+                <label class="rule-toggle">
+                  <input type="checkbox" ${{isOff ? '' : 'checked'}} data-action="toggle-default" data-key="${{escapeHtml(key)}}">
+                  <span>${{escapeHtml(rule.join(' + '))}}</span>
+                </label>
+                <span class="rule-tag">기본</span>
+              </div>
+            `;
+          }});
+          warningRuleState.custom.forEach((rule, idx) => {{
+            html += `
+              <div class="rule-row">
+                <span class="rule-text">${{escapeHtml(rule.join(' + '))}}</span>
+                <span class="rule-tag rule-tag-custom">추가됨</span>
+                <button type="button" class="rule-remove-btn" data-action="remove-custom" data-idx="${{idx}}">삭제</button>
+              </div>
+            `;
+          }});
+          document.getElementById('warningRuleList').innerHTML = html || '<div class="empty-state">등록된 규칙이 없습니다</div>';
+        }}
+
+        function addCustomWarningRule() {{
+          const input = document.getElementById('newRuleInput');
+          const raw = input.value.trim();
+          if (!raw) return;
+          const rule = raw.split('+').map(s => s.trim()).filter(Boolean);
+          if (rule.length === 0) return;
+          warningRuleState.custom.push(rule);
+          saveWarningRuleState(warningRuleState);
+          recomputeWarningRules();
+          input.value = '';
+          renderWarningSettingsModal();
+          refreshAll();
+        }}
+
+        function handleWarningModalClick(e) {{
+          const toggleEl = e.target.closest('[data-action="toggle-default"]');
+          if (toggleEl) {{
+            const key = toggleEl.dataset.key;
+            const disabledSet = new Set(warningRuleState.disabled);
+            if (toggleEl.checked) {{ disabledSet.delete(key); }} else {{ disabledSet.add(key); }}
+            warningRuleState.disabled = [...disabledSet];
+            saveWarningRuleState(warningRuleState);
+            recomputeWarningRules();
+            renderWarningSettingsModal();
+            refreshAll();
+            return;
+          }}
+          const removeEl = e.target.closest('[data-action="remove-custom"]');
+          if (removeEl) {{
+            const idx = parseInt(removeEl.dataset.idx, 10);
+            warningRuleState.custom.splice(idx, 1);
+            saveWarningRuleState(warningRuleState);
+            recomputeWarningRules();
+            renderWarningSettingsModal();
+            refreshAll();
+          }}
+        }}
+
+        function renderBriefing() {{
+          refreshAll();
           tickClock();
           setInterval(tickClock, 1000);
-
-          renderDashboard('');
 
           document.getElementById('filterSearchBtn').addEventListener('click', applyFilter);
           document.getElementById('filterResetBtn').addEventListener('click', resetFilter);
           document.getElementById('filterInput').addEventListener('keydown', e => {{
             if (e.key === 'Enter') applyFilter();
+          }});
+
+          document.getElementById('dashboard').addEventListener('click', e => {{
+            const badge = e.target.closest('.badge-dup');
+            if (badge) toggleDupList(badge);
+          }});
+
+          document.getElementById('warningSettingsBtn').addEventListener('click', openWarningSettings);
+          document.getElementById('warningSettingsCloseBtn').addEventListener('click', closeWarningSettings);
+          document.getElementById('warningSettingsOverlay').addEventListener('click', e => {{
+            if (e.target.id === 'warningSettingsOverlay') closeWarningSettings();
+          }});
+          document.getElementById('warningRuleList').addEventListener('click', handleWarningModalClick);
+          document.getElementById('addRuleBtn').addEventListener('click', addCustomWarningRule);
+          document.getElementById('newRuleInput').addEventListener('keydown', e => {{
+            if (e.key === 'Enter') addCustomWarningRule();
           }});
         }}
 
