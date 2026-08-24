@@ -735,6 +735,12 @@ def run_briefing():
           --gloss: rgba(255,255,255,.9);
           --cast: rgba(20,22,22,.22);
 
+          /* 마스트헤드 전용 네이비 — 로고·버튼이 메탈 데스크 위에 놓인 편지지 색 */
+          --navy: #1e2530;
+          --navy-light: #34435a;
+          --navy-dark: #12161d;
+          --navy-line: rgba(18,22,29,.32);
+
           --mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
           --sans: 'IBM Plex Sans KR', 'Segoe UI', 'Pretendard', 'Malgun Gothic', -apple-system, BlinkMacSystemFont, Roboto, Arial, sans-serif;
         }}
@@ -759,8 +765,10 @@ def run_briefing():
           align-items: center;
           justify-content: space-between;
           padding: 16px 28px;
-          border-bottom: 2px solid var(--rule-bottom);
-          background: var(--bg);
+          border-bottom: 1px solid var(--navy-line);
+          background: transparent;
+          backdrop-filter: blur(6px);
+          -webkit-backdrop-filter: blur(6px);
           position: sticky;
           top: 0;
           z-index: 10;
@@ -775,10 +783,10 @@ def run_briefing():
           font-family: var(--sans);
           font-weight: 700;
           font-size: 0.95em;
-          background: var(--brand);
+          background: linear-gradient(135deg, var(--navy-light) 0%, var(--navy) 55%, var(--navy-dark) 100%);
           color: #ffffff;
           letter-spacing: 0.5px;
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 1px 2px rgba(22,25,31,.18);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 2px 5px rgba(12,14,18,.35);
         }}
 
         .brand h1 {{
@@ -802,15 +810,17 @@ def run_briefing():
           font-family: var(--mono);
           font-size: 0.76em;
           font-weight: 700;
-          color: var(--accent-green);
-          border: 1px solid var(--accent-green);
+          color: #ffffff;
+          background: linear-gradient(135deg, var(--navy-light) 0%, var(--navy) 55%, var(--navy-dark) 100%);
+          border: 1px solid var(--navy-dark);
           padding: 5px 11px;
           border-radius: 3px;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 2px 5px rgba(12,14,18,.3);
         }}
 
         .live-indicator .dot {{
           width: 6px; height: 6px; border-radius: 50%;
-          background: var(--accent-green);
+          background: #ffffff;
           animation: pulse 2s ease-in-out infinite;
         }}
 
@@ -870,13 +880,16 @@ def run_briefing():
         }}
 
         .column-head {{
-          font-size: 0.98em;
+          display: inline-block;
+          font-size: 0.94em;
           font-weight: 700;
-          color: var(--text-primary);
-          padding-bottom: 9px;
-          margin-bottom: 14px;
-          border-bottom: 2px solid var(--rule-bottom);
+          color: #ffffff;
           letter-spacing: -.01em;
+          padding: 8px 16px;
+          margin-bottom: 14px;
+          border-radius: 4px;
+          background: linear-gradient(135deg, var(--navy-light) 0%, var(--navy) 55%, var(--navy-dark) 100%);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 2px 6px rgba(12,14,18,.35);
         }}
 
         .column-body {{
@@ -1059,15 +1072,16 @@ def run_briefing():
           font-family: var(--sans);
           font-size: 0.78em;
           font-weight: 700;
-          color: var(--text-secondary);
-          background: var(--bg);
-          border: 1px solid var(--border-strong);
+          color: #ffffff;
+          background: linear-gradient(135deg, var(--navy-light) 0%, var(--navy) 55%, var(--navy-dark) 100%);
+          border: 1px solid var(--navy-dark);
           border-radius: 3px;
           padding: 6px 12px;
           cursor: pointer;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 2px 5px rgba(12,14,18,.3);
         }}
 
-        .settings-btn:hover {{ color: var(--accent); border-color: var(--accent); }}
+        .settings-btn:hover {{ filter: brightness(1.15); }}
 
         .topbar-right {{
           display: flex;
@@ -1553,8 +1567,8 @@ def run_briefing():
         recomputeWarningRules();
 
         const columnDefs = [
-          {{ key: 'news', title: '① 뉴스' }},
-          {{ key: 'notice', title: '② 공시 · 충주시청 알림' }},
+          {{ key: 'news', title: '① 뉴스 · 충주시 공지사항' }},
+          {{ key: 'notice', title: '② 고시 · 공고' }},
           {{ key: 'school', title: '③ 학교 / 공동주택' }},
           {{ key: 'etc', title: '④ 기타' }},
         ];
