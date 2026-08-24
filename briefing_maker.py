@@ -22,6 +22,11 @@ socket.setdefaulttimeout(SOCKET_TIMEOUT_SEC)
 # 연속으로 이만큼 실패하면 그 게시판은 포기하고 다음 수집으로 넘어간다.
 CONSECUTIVE_FAILURE_LIMIT = 3
 
+# 수집이 실패한 카테고리를 기록해 둔다. 해외(GitHub Actions) 러너에서 국내
+# 관공서 사이트(.go.kr) 접속이 간헐적으로 전부 타임아웃되는데, 그때마다 해당 열이
+# 통째로 비어 버리므로 실패한 카테고리는 직전 성공분(item_cache.json)으로 되살린다.
+FAILED_CATEGORIES = set()
+
 # 1. 네이버 API 키
 # 로컬 실행 시에는 아래 기본값을 쓰고, GitHub Actions에서는 저장소 Secrets(NAVER_CLIENT_ID/SECRET)로
 # 덮어써서 키가 코드/공개 저장소에 그대로 노출되지 않도록 한다.
@@ -84,6 +89,47 @@ NOTICE_DEPT_WHITELIST = {
 # {"링크": ["처음 본 날짜", "그다음 본 날짜", ...]} 형태로, 링크가 목격된 날짜(중복 없이)만 누적한다.
 HISTORY_FILE = "item_history.json"
 HISTORY_PRUNE_DAYS = 60  # 이만큼 오래 안 보인 항목은 이력 파일에서 정리
+
+# 카테고리별 마지막 성공 수집분. 수집이 실패한 카테고리를 되살리는 데 쓴다.
+CACHE_FILE = "item_cache.json"
+
+def load_cache():
+    try:
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+def save_cache(cache):
+    with open(CACHE_FILE, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False)
+
+def restore_failed_categories(collected):
+    """수집이 실패해 0건이 된 카테고리를 직전 성공분으로 되살리고, 성공한 카테고리는 캐시를 갱신한다."""
+    cache = load_cache()
+
+    by_category = {}
+    for item in collected:
+        by_category.setdefault(item["분류"], []).append(item)
+
+    # 성공한 카테고리(항목이 있고 실패 기록도 없음)만 캐시를 새로 쓴다.
+    for category, items in by_category.items():
+        if category not in FAILED_CATEGORIES:
+            cache[category] = items
+
+    restored = []
+    for category in sorted(FAILED_CATEGORIES):
+        if by_category.get(category):
+            continue  # 일부라도 수집됐으면 그대로 쓴다
+        for cached_item in cache.get(category, []):
+            item = dict(cached_item)
+            item["보관"] = True   # 최신 수집이 아니라 직전 성공분임을 표시
+            restored.append(item)
+        if cache.get(category):
+            print(f" [복구] {category}: 직전 수집분 {len(cache[category])}건 사용")
+
+    save_cache(cache)
+    return collected + restored
 
 def load_history():
     try:
@@ -151,6 +197,7 @@ def fetch_elis(query_params, category, now_str):
                 "링크": detail_url
             })
     except Exception as e:
+        FAILED_CATEGORIES.add(category)
         print(f" [오류] {category} 수집 실패: {e}")
     return results
 
@@ -199,6 +246,7 @@ def fetch_chungju_bbs(key, bbs_no, category, now_str):
                 })
         except Exception as e:
             consecutive_failures += 1
+            FAILED_CATEGORIES.add(category)
             print(f" [오류] {category} 수집 실패 ({kw}): {e}")
     return results
 
@@ -253,6 +301,7 @@ def fetch_chungju_eminwon(key, ancmt_se_code, category, now_str):
                 })
         except Exception as e:
             consecutive_failures += 1
+            FAILED_CATEGORIES.add(category)
             print(f" [오류] {category} 수집 실패 ({kw}): {e}")
     return results
 
@@ -298,6 +347,7 @@ def fetch_hug(keyword, category, now_str):
                 "링크": detail_url
             })
     except Exception as e:
+        FAILED_CATEGORIES.add(category)
         print(f" [오류] {category} 수집 실패: {e}")
     return results
 
@@ -349,6 +399,7 @@ def fetch_target_cafes(cafe_urls, queries, category, now_str):
                     "링크": link
                 })
         except Exception as e:
+            FAILED_CATEGORIES.add(category)
             print(f" [오류] {category} 수집 실패 ({query}): {e}")
     return results
 
@@ -494,6 +545,7 @@ def fetch_eum(keyword, category, now_str):
                 "링크": detail_url
             })
     except Exception as e:
+        FAILED_CATEGORIES.add(category)
         print(f" [오류] {category} 수집 실패: {e}")
     return results
 
@@ -617,7 +669,8 @@ def run_briefing():
         all_collected_data.extend(items)
         print(f" - {board['category']}: {len(items)}건 발견")
 
-    # 5. 지난 실행 대비 신규 항목 판정
+    # 5. 수집 실패한 카테고리를 직전 성공분으로 되살린 뒤 신규 항목 판정
+    all_collected_data = restore_failed_categories(all_collected_data)
     all_collected_data = dedupe_by_link(all_collected_data)
     all_collected_data = dedupe_similar_news_in_categories(all_collected_data)
     assign_columns(all_collected_data)
@@ -951,6 +1004,17 @@ def run_briefing():
           border-color: var(--new-line);
         }}
 
+
+        .stale-notice {{
+          font-family: var(--mono);
+          font-size: 0.68em;
+          color: var(--new);
+          background: var(--new-soft);
+          border: 1px solid var(--new-line);
+          border-radius: 3px;
+          padding: 5px 8px;
+          margin: 8px 0 2px;
+        }}
 
         .badge-dup {{
           background: var(--bg-subtle);
@@ -1631,9 +1695,15 @@ def run_briefing():
         }}
 
         function renderCardBody(category, items, filterTerm) {{
+          // 이 카테고리가 통째로 직전 수집분이면(최신 수집 실패) 그 사실을 먼저 알린다.
+          const stale = items.length > 0 && items.every(i => i['보관']);
+          const staleNotice = stale
+            ? '<div class="stale-notice">최신 수집이 실패해 직전 결과를 표시합니다</div>'
+            : '';
+
           const isRisk = category.indexOf('위기징후') !== -1;
           if (isRisk) {{
-            return items.map(item => renderItem(item, filterTerm)).join('');
+            return staleNotice + items.map(item => renderItem(item, filterTerm)).join('');
           }}
 
           const buckets = {{}};
@@ -1643,7 +1713,7 @@ def run_briefing():
             buckets[b].push(item);
           }});
 
-          let html = '';
+          let html = staleNotice;
           bucketOrder.forEach(b => {{
             if (buckets[b] && buckets[b].length > 0) {{
               html += `<div class="bucket-header">${{b}}<span class="bucket-count">${{buckets[b].length}}</span></div>`;

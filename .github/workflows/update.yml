@@ -42,7 +42,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add index.html item_history.json
+          git add index.html item_history.json item_cache.json
           git diff --staged --quiet || git commit -m "자동 갱신: $(date -u '+%Y-%m-%d %H:%M UTC')"
           git push
 
