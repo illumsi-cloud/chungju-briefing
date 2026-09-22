@@ -4,6 +4,7 @@ import json
 import ssl
 import re
 import os
+import sys
 import socket
 import http.cookiejar
 from datetime import datetime, timedelta
@@ -28,10 +29,47 @@ CONSECUTIVE_FAILURE_LIMIT = 3
 FAILED_CATEGORIES = set()
 
 # 1. 네이버 API 키
-# 로컬 실행 시에는 아래 기본값을 쓰고, GitHub Actions에서는 저장소 Secrets(NAVER_CLIENT_ID/SECRET)로
-# 덮어써서 키가 코드/공개 저장소에 그대로 노출되지 않도록 한다.
-NAVER_CLIENT_ID = os.environ.get("NAVER_CLIENT_ID", "5cMwFIqXQNuG9rj4Ckeb")
-NAVER_CLIENT_SECRET = os.environ.get("NAVER_CLIENT_SECRET", "W6_J7EAKCx")
+# 키는 코드에 적지 않는다. GitHub Actions에서는 저장소 Secrets가 환경변수로 주입되고,
+# 로컬 실행 시에는 이 파일과 같은 폴더의 .env(git 추적 제외)에서 읽는다.
+# 예전에는 os.environ.get()의 기본값 자리에 실제 키를 적어 두었고, 그 값이 공개
+# 저장소에 그대로 노출됐다. 기본값을 둔다는 것은 키를 코드에 둔다는 뜻이므로 두지 않는다.
+def _load_dotenv(path=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")):
+    """.env의 KEY=VALUE를 환경변수로 올린다.
+
+    이미 설정된 환경변수는 덮어쓰지 않는다. 그러면 GitHub Actions에서 Secrets로
+    주입된 값이 항상 우선하고, .env는 로컬 전용이 된다.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.readlines()
+    except OSError:
+        return  # .env가 없는 환경(GitHub Actions)에서는 그냥 넘어간다
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+_load_dotenv()
+
+NAVER_CLIENT_ID = os.environ.get("NAVER_CLIENT_ID", "")
+NAVER_CLIENT_SECRET = os.environ.get("NAVER_CLIENT_SECRET", "")
+
+if not NAVER_CLIENT_ID or not NAVER_CLIENT_SECRET:
+    # 키 없이 진행하면 네이버 수집이 전부 401로 실패한다. 실패한 열은 직전 캐시분으로
+    # 되살려지므로, 겉보기에는 정상인 낡은 index.html이 새로 덮여 생산된다. 그 전에 멈춘다.
+    sys.exit(
+        "네이버 API 키가 설정되지 않았습니다.\n"
+        "  - 로컬 실행: 이 파일과 같은 폴더에 .env를 만들고 "
+        "NAVER_CLIENT_ID / NAVER_CLIENT_SECRET을 적으세요(.env.example 참고).\n"
+        "  - GitHub Actions: 저장소 Settings → Secrets and variables → Actions에 "
+        "두 값을 등록하세요."
+    )
 
 # 공공기관 방화벽 환경 대비 SSL 우회 설정
 ctx = ssl.create_default_context()
